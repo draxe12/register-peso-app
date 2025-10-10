@@ -1,6 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Weight, Moon, Sun, Monitor } from 'lucide-react';
-import { formatNumber } from './utils/format';
+import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
+import Icon from '@mdi/react';
+import { mdiSquareMedium, mdiComma, mdiMenuUp, mdiMenuDown } from '@mdi/js';
+
+// ==================== UTILIDADES DE FORMATO ====================
+const formatNumber = (value, decimals, separator) => {
+    if (value === null || value === undefined || isNaN(value)) return '0';
+    const factor = Math.pow(10, decimals);
+    const rounded = Math.round((value + Number.EPSILON) * factor) / factor;
+    const fixed = rounded.toFixed(decimals);
+    return separator === 'coma' ? fixed.replace('.', ',') : fixed;
+};
+
+const formatNumberForDisplay = (value, separator) => {
+  if (!value || value === '') return '';
+  const strValue = String(value);
+  return separator === ',' ? strValue.replace('.', ',') : strValue.replace(',', '.');
+};
 
 // ==================== HOOKS PERSONALIZADOS ====================
 
@@ -14,18 +30,21 @@ const useDarkMode = () => {
     const root = window.document.documentElement;
     
     const applyTheme = (selectedTheme) => {
+      root.classList.remove('dark');
+      
       if (selectedTheme === 'auto') {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        root.classList.toggle('dark', prefersDark);
-      } else {
-        root.classList.toggle('dark', selectedTheme === 'dark');
+        if (prefersDark) {
+          root.classList.add('dark');
+        }
+      } else if (selectedTheme === 'dark') {
+        root.classList.add('dark');
       }
     };
 
     applyTheme(theme);
     localStorage.setItem('theme', theme);
 
-    // Listener para cambios automáticos
     if (theme === 'auto') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       const handler = () => applyTheme('auto');
@@ -71,8 +90,9 @@ const useWeights = (initialSize = 60) => {
 
   const importWeightsFromText = (text) => {
     const numbers = text
-      .split(/[\s,;]+/)
+      .split(/[\s;]+/)
       .map(s => s.trim())
+      .map(s => s.replace(',', '.'))
       .filter(s => s !== '' && !isNaN(parseFloat(s)))
       .map(s => parseFloat(s).toFixed(2));
 
@@ -100,6 +120,263 @@ const useWeights = (initialSize = 60) => {
     setIsLoadedFromHistory(true);
   };
 
+  const optimizeUniformity = (targetUniformity = 80) => {
+    const validIndices = [];
+    const validWeights = [];
+    
+    // Obtener índices y valores válidos
+    weights.forEach((w, idx) => {
+      if (w !== '' && !isNaN(parseFloat(w))) {
+        validIndices.push(idx);
+        validWeights.push(parseFloat(w));
+      }
+    });
+
+    if (validWeights.length < 3) {
+      return { success: false, message: 'Se necesitan al menos 3 pesos válidos para optimizar' };
+    }
+
+    // Función para redondear a 2 decimales pares
+    const roundToEvenDecimals = (value) => {
+      // Redondear a 2 decimales
+      let rounded = Math.round(value * 100) / 100;
+      // Obtener la parte decimal (ej: 2.47 -> 47)
+      let decimalPart = Math.round((rounded % 1) * 100);
+      
+      // Si es impar, ajustar al par más cercano
+      if (decimalPart % 2 !== 0) {
+        // Alternar entre redondear hacia arriba o abajo
+        if (Math.random() < 0.5) {
+          decimalPart += 1;
+        } else {
+          decimalPart -= 1;
+        }
+        // Reconstruir el número
+        rounded = Math.floor(rounded) + (decimalPart / 100);
+      }
+      
+      return parseFloat(rounded.toFixed(2));
+    };
+
+    // Calcular estadísticas actuales
+    const promedio = validWeights.reduce((sum, w) => sum + w, 0) / validWeights.length;
+    const rango10 = promedio * 0.1;
+    const min10 = promedio - rango10;
+    const max10 = promedio + rango10;
+
+    // Calcular uniformidad actual
+    const dentroRango = validWeights.filter(w => w >= min10 && w <= max10).length;
+    const uniformidadActual = (dentroRango / validWeights.length) * 100;
+
+    // Determinar si necesitamos subir o bajar uniformidad
+    const needsIncrease = uniformidadActual < 75;
+    const needsDecrease = uniformidadActual > 85;
+
+    if (!needsIncrease && !needsDecrease) {
+      return { success: false, message: 'La uniformidad ya está en el rango óptimo (75%-85%)' };
+    }
+
+    // Organizar pesos por columnas (3 columnas)
+    const columns = 3;
+    const columnGroups = [[], [], []];
+
+    validIndices.forEach((idx, i) => {
+      const col = idx % columns;
+      columnGroups[col].push({
+        index: idx,
+        weight: validWeights[i],
+        inRange: validWeights[i] >= min10 && validWeights[i] <= max10
+      });
+    });
+
+    const newWeights = [...weights];
+    let totalAdjusted = 0;
+
+    if (needsIncrease) {
+      // SUBIR UNIFORMIDAD: Acercar pesos al rango
+      columnGroups.forEach(columnWeights => {
+        if (columnWeights.length === 0) return;
+
+        // Calcular suma original de la columna
+        const originalSum = columnWeights.reduce((sum, w) => sum + w.weight, 0);
+
+        // Identificar pesos fuera de rango en esta columna
+        const outOfRange = columnWeights.filter(w => !w.inRange);
+        const inRange = columnWeights.filter(w => w.inRange);
+
+        if (outOfRange.length === 0 || inRange.length === 0) return;
+
+        // Ajustar pesos fuera de rango
+        const adjustedWeights = new Map();
+
+        outOfRange.forEach(item => {
+          const currentWeight = item.weight;
+          let targetWeight;
+
+          if (currentWeight < min10) {
+            targetWeight = min10 + 0.02;
+          } else {
+            targetWeight = max10 - 0.02;
+          }
+
+          targetWeight = roundToEvenDecimals(targetWeight);
+          adjustedWeights.set(item.index, targetWeight);
+        });
+
+        // Calcular diferencia total
+        let totalDiff = 0;
+        outOfRange.forEach(item => {
+          totalDiff += adjustedWeights.get(item.index) - item.weight;
+        });
+
+        // Compensar en los pesos dentro del rango
+        const compensationPerWeight = -totalDiff / inRange.length;
+        
+        inRange.forEach(item => {
+          let compensated = item.weight + compensationPerWeight;
+          compensated = roundToEvenDecimals(compensated);
+          adjustedWeights.set(item.index, compensated);
+        });
+
+        // Ajustar para mantener suma exacta
+        let newSum = 0;
+        columnWeights.forEach(item => {
+          newSum += adjustedWeights.get(item.index);
+        });
+
+        const sumDiff = originalSum - newSum;
+        
+        if (Math.abs(sumDiff) > 0.001) {
+          // Distribuir la diferencia en pasos de 0.02 (par)
+          const adjustmentStep = sumDiff > 0 ? 0.02 : -0.02;
+          let remaining = sumDiff;
+          let idx = 0;
+
+          while (Math.abs(remaining) >= 0.01 && idx < inRange.length) {
+            const item = inRange[idx];
+            const current = adjustedWeights.get(item.index);
+            const adjusted = roundToEvenDecimals(current + adjustmentStep);
+            adjustedWeights.set(item.index, adjusted);
+            remaining -= adjustmentStep;
+            idx++;
+          }
+        }
+
+        // Aplicar cambios
+        adjustedWeights.forEach((weight, index) => {
+          newWeights[index] = weight.toFixed(2);
+        });
+
+        totalAdjusted += outOfRange.length;
+      });
+
+      setWeights(newWeights);
+      return { 
+        success: true, 
+        message: `Uniformidad mejorada. Se ajustaron ${totalAdjusted} peso(s)`,
+        adjustedCount: totalAdjusted
+      };
+
+    } else {
+      // BAJAR UNIFORMIDAD: Sacar pesos del rango
+      columnGroups.forEach(columnWeights => {
+        if (columnWeights.length === 0) return;
+
+        // Calcular suma original de la columna
+        const originalSum = columnWeights.reduce((sum, w) => sum + w.weight, 0);
+
+        // Buscar pesos DENTRO del rango más cercanos a los límites
+        const nearLimits = columnWeights
+          .filter(w => w.inRange)
+          .map(w => ({
+            ...w,
+            distanceToMin: Math.abs(w.weight - min10),
+            distanceToMax: Math.abs(w.weight - max10)
+          }))
+          .sort((a, b) => {
+            const minDistA = Math.min(a.distanceToMin, a.distanceToMax);
+            const minDistB = Math.min(b.distanceToMin, b.distanceToMax);
+            return minDistA - minDistB;
+          });
+
+        const targetOut = Math.ceil(columnWeights.length * 0.15);
+        const toAdjust = nearLimits.slice(0, Math.min(targetOut, nearLimits.length));
+        const remaining = columnWeights.filter(w => !toAdjust.find(t => t.index === w.index));
+
+        if (toAdjust.length === 0 || remaining.length === 0) return;
+
+        const adjustedWeights = new Map();
+
+        // Sacar pesos del rango
+        toAdjust.forEach(item => {
+          const currentWeight = item.weight;
+          let targetWeight;
+
+          if (item.distanceToMin < item.distanceToMax) {
+            targetWeight = min10 - 0.02;
+          } else {
+            targetWeight = max10 + 0.02;
+          }
+
+          targetWeight = roundToEvenDecimals(targetWeight);
+          adjustedWeights.set(item.index, targetWeight);
+        });
+
+        // Calcular diferencia total
+        let totalDiff = 0;
+        toAdjust.forEach(item => {
+          totalDiff += adjustedWeights.get(item.index) - item.weight;
+        });
+
+        // Compensar en los pesos restantes
+        const compensationPerWeight = -totalDiff / remaining.length;
+        
+        remaining.forEach(item => {
+          let compensated = item.weight + compensationPerWeight;
+          compensated = roundToEvenDecimals(compensated);
+          adjustedWeights.set(item.index, compensated);
+        });
+
+        // Ajustar para mantener suma exacta
+        let newSum = 0;
+        columnWeights.forEach(item => {
+          newSum += adjustedWeights.get(item.index);
+        });
+
+        const sumDiff = originalSum - newSum;
+        
+        if (Math.abs(sumDiff) > 0.001) {
+          const adjustmentStep = sumDiff > 0 ? 0.02 : -0.02;
+          let remaining = sumDiff;
+          let idx = 0;
+
+          while (Math.abs(remaining) >= 0.01 && idx < toAdjust.length) {
+            const item = toAdjust[idx];
+            const current = adjustedWeights.get(item.index);
+            const adjusted = roundToEvenDecimals(current + adjustmentStep);
+            adjustedWeights.set(item.index, adjusted);
+            remaining -= adjustmentStep;
+            idx++;
+          }
+        }
+
+        // Aplicar cambios
+        adjustedWeights.forEach((weight, index) => {
+          newWeights[index] = weight.toFixed(2);
+        });
+
+        totalAdjusted += toAdjust.length;
+      });
+
+      setWeights(newWeights);
+      return { 
+        success: true, 
+        message: `Uniformidad ajustada a rango óptimo. Se modificaron ${totalAdjusted} peso(s)`,
+        adjustedCount: totalAdjusted
+      };
+    }
+  };
+
   return {
     weights,
     numUnidades,
@@ -110,7 +387,8 @@ const useWeights = (initialSize = 60) => {
     setWeights,
     importWeightsFromText,
     loadWeights,
-    isLoadedFromHistory
+    isLoadedFromHistory,
+    optimizeUniformity
   };
 };
 
@@ -298,10 +576,30 @@ const exportUtils = {
 
 // ==================== COMPONENTES ====================
 
+// Componente: Decimal Separator Switcher
+const DecimalSeparatorSwitcher = ({ decimalSeparator, setDecimalSeparator }) => (
+  <div className="flex gap-2 justify-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+    <button
+      onClick={() => setDecimalSeparator('coma')}
+      className={`p-2 rounded text-gray-700 dark:text-gray-300 ${decimalSeparator === 'coma' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
+      title="Separador decimal: coma (1,23)"
+    >
+      <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiComma} />
+    </button>
+    <button
+      onClick={() => setDecimalSeparator('punto')}
+      className={`p-2 rounded text-gray-700 dark:text-gray-300 ${decimalSeparator === 'punto' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
+      title="Separador decimal: punto (1.23)"
+    >
+      <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiSquareMedium} />
+    </button>
+  </div>
+);
+
 // Componente: Theme Switcher
 const ThemeSwitcher = ({ theme, setTheme }) => {
   return (
-    <div className="flex gap-2 bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+    <div className="flex gap-2 justify-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
       <button
         onClick={() => setTheme('light')}
         className={`p-2 rounded ${theme === 'light' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
@@ -459,7 +757,7 @@ const ImportModal = ({ isOpen, onClose, onImport }) => {
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 onPaste={handlePaste}
-                placeholder="Ejemplo: 2.45 2.67 2.89 3.01&#10;O presiona Ctrl+V para pegar imagen..."
+                placeholder="Ejemplo: 2.45 2.67 2,89 3,01&#10;O presiona Ctrl+V para pegar imagen..."
                 className="w-full h-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
               <button
@@ -538,13 +836,13 @@ const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNu
   const edades = [7, 14, 21, 28, 35, 42];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Corral</label>
         <select
           value={corral}
           onChange={(e) => setCorral(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
         >
           {corrales.map(c => (
             <option key={c} value={c}>{c}</option>
@@ -557,7 +855,7 @@ const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNu
         <select
           value={edad}
           onChange={(e) => setEdad(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
         >
           {edades.map(e => (
             <option key={e} value={e}>{e} días</option>
@@ -573,7 +871,7 @@ const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNu
           onChange={(e) => onNumUnidadesChange(e.target.value)}
           min="1"
           max="300"
-          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
         />
       </div>
 
@@ -603,11 +901,10 @@ const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNu
 };
 
 // Componente: Tabla de Pesos
-const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport }) => {
+const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, decimalSeparator, analysis, weightManager }) => {
   const columns = 3;
   const rows = Math.ceil(numUnidades / columns);
 
-  // Calcular sumas por columna
   const columnSums = Array(columns).fill(0).map((_, colIdx) => {
     let sum = 0;
     for (let rowIdx = 0; rowIdx < rows; rowIdx++) {
@@ -623,12 +920,29 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport })
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
-          <Weight className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Registro de Pesos (kg)</h2>
+          <Edit className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Tabla de Pesos (kg)</h2>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {analysis && (analysis.uniformidad < 75 || analysis.uniformidad > 85) && (
+            <button
+              onClick={() => {
+                const result = weightManager.optimizeUniformity(80);
+                if (result.success) {
+                  alert(`✅ ${result.message}`);
+                } else {
+                  alert(`ℹ️ ${result.message}`);
+                }
+              }}
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium flex items-center gap-2 shadow-md"
+              title={analysis.uniformidad < 75 ? "Aumentar uniformidad" : "Reducir uniformidad al rango óptimo"}
+            >
+              <Sparkles className="w-4 h-4" />
+              {analysis.uniformidad < 75 ? '↑ Optimizar' : '↓ Ajustar'}
+            </button>
+          )}
           <button
             onClick={onImport}
             className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium flex items-center gap-2"
@@ -638,7 +952,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport })
           </button>
           <button
             onClick={onClear}
-            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
+            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
           >
             Limpiar
           </button>
@@ -646,7 +960,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport })
       </div>
       
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
+        <table className="w-full min-w-[280px] border-collapse">
           <thead>
             <tr className="bg-gray-100 dark:bg-gray-700">
               <th className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-sm font-semibold text-gray-800 dark:text-gray-100">N°</th>
@@ -668,19 +982,51 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport })
                   }
                   
                   return (
-                    <td key={colIdx} className="border border-gray-300 dark:border-gray-600 p-0">
+                    <td 
+                      key={colIdx}
+                      className="border border-gray-300 dark:border-gray-600 p-0 relative group"
+                    >
                       <input
-                        type="number"
-                        step="0.01"
+                        type="text"
                         inputMode="decimal"
-                        value={weights[idx]}
+                        value={formatNumberForDisplay(weights[idx], decimalSeparator === 'coma' ? ',' : '.')}
                         onChange={(e) => {
-                          let value = e.target.value;
-                          onWeightChange(idx, value);
+                          let valueToProcess = String(e.target.value);
+                          valueToProcess = valueToProcess.replace(',', '.');
+                          onWeightChange(idx, valueToProcess);
                         }}
-                        className="w-full px-2 py-2 text-center border-none focus:ring-2 focus:ring-blue-400 focus:outline-none bg-transparent text-gray-900 dark:text-gray-100"
-                        placeholder={`${formatNumber(0, 2)}`}
+                        className="w-full px-2 py-2 pr-8 text-center border-none focus:ring-2 focus:ring-blue-400 focus:outline-none bg-transparent text-gray-900 dark:text-gray-100 text-sm sm:text-base"
+                        placeholder={`${formatNumber(0, 2, decimalSeparator)}`}
                       />
+                      
+                      <div className="hidden group-hover:flex flex-col absolute right-2 top-1/2 -translate-y-1/2">
+                          <button
+                              onClick={() => {
+                                  const currentValue = parseFloat(weights[idx]) || 0;
+                                  const newValue = (currentValue + 0.01).toFixed(2);
+                                  onWeightChange(idx, newValue);
+                              }}
+                              tabIndex={-1}
+                              className="p-0 rounded-t bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
+                              title="Incrementar peso"
+                          >
+                              {/* <ChevronUp className="w-3 h-3 text-gray-700 dark:text-gray-300" /> */}
+                              <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiMenuUp} />
+                          </button>
+                          <button
+                              onClick={() => {
+                                  const currentValue = parseFloat(weights[idx]) || 0;
+                                  const newValue = Math.max(0, currentValue - 0.01).toFixed(2);
+                                  onWeightChange(idx, newValue);
+                              }}
+                              tabIndex={-1}
+                              className="p-0 rounded-b bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
+                              title="Decrementar peso"
+                          >
+                              {/* <ChevronDown className="w-3 h-3 text-gray-700 dark:text-gray-300" /> */}
+                              <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiMenuDown} />
+                          </button>
+                      </div>
                     </td>
                   );
                 })}
@@ -694,7 +1040,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport })
               </td>
               {columnSums.map((sum, colIdx) => (
                 <td key={colIdx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center font-bold text-blue-700 dark:text-blue-300">
-                  {formatNumber(sum, 3)}
+                  {formatNumber(sum, 3, decimalSeparator)}
                 </td>
               ))}
             </tr>
@@ -703,7 +1049,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport })
                 Total
               </td>
               <td colSpan={columns} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center font-bold text-green-700 dark:text-green-300 text-lg">
-                {formatNumber(totalSum, 3)} kg
+                {formatNumber(totalSum, 3, decimalSeparator)} kg
               </td>
             </tr>
           </tfoot>
@@ -714,7 +1060,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport })
 };
 
 // Componente: Panel de Análisis
-const PanelAnalisis = ({ analysis }) => {
+const PanelAnalisis = ({ analysis, decimalSeparator }) => {
   if (!analysis) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
@@ -737,28 +1083,28 @@ const PanelAnalisis = ({ analysis }) => {
       </div>
 
       <div className="space-y-3">
-        <StatItem label="Peso Mínimo" value={`${formatNumber(analysis.pesoMinimo, 3)} kg`} />
-        <StatItem label="Peso Máximo" value={`${formatNumber(analysis.pesoMaximo, 3)} kg`} />
-        <StatItem label="Rango" value={`${formatNumber(analysis.rango, 3)} kg`} />
-        <StatItem label="Promedio" value={`${formatNumber(analysis.promedio, 3)} kg`} valueClass="text-green-600 dark:text-green-400" />
-        <StatItem label="Mediana" value={`${formatNumber(analysis.mediana, 3)} kg`} />
-        <StatItem label="Desviación Estándar" value={`${formatNumber(analysis.desviacion, 3)} kg`} />
-        <StatItem label="Coef. de Variación" value={`${formatNumber(analysis.cv, 1)} %`} />
+        <StatItem label="Peso Mínimo" value={`${formatNumber(analysis.pesoMinimo, 3, decimalSeparator)} kg`} />
+        <StatItem label="Peso Máximo" value={`${formatNumber(analysis.pesoMaximo, 3, decimalSeparator)} kg`} />
+        <StatItem label="Rango" value={`${formatNumber(analysis.rango, 3, decimalSeparator)} kg`} />
+        <StatItem label="Promedio" value={`${formatNumber(analysis.promedio, 3, decimalSeparator)} kg`} valueClass="text-green-600 dark:text-green-400" />
+        <StatItem label="Mediana" value={`${formatNumber(analysis.mediana, 3, decimalSeparator)} kg`} />
+        <StatItem label="Desviación Estándar" value={`${formatNumber(analysis.desviacion, 3, decimalSeparator)} kg`} />
+        <StatItem label="Coef. de Variación" value={`${formatNumber(analysis.cv, 1, decimalSeparator)} %`} />
 
         <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg mt-4">
           <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-2">Rango ±10%</p>
           <div className="space-y-1 text-sm">
-            <p className="text-gray-700 dark:text-gray-300">Rango: <span className="font-bold">{formatNumber(analysis.rango10, 3)} kg</span></p>
-            <p className="text-gray-700 dark:text-gray-300">Mín (-10%): <span className="font-bold">{formatNumber(analysis.min10, 3)} kg</span></p>
-            <p className="text-gray-700 dark:text-gray-300">Máx (+10%): <span className="font-bold">{formatNumber(analysis.max10, 3)} kg</span></p>
+            <p className="text-gray-700 dark:text-gray-300">Rango: <span className="font-bold">{formatNumber(analysis.rango10, 3, decimalSeparator)} kg</span></p>
+            <p className="text-gray-700 dark:text-gray-300">Mín (-10%): <span className="font-bold">{formatNumber(analysis.min10, 3, decimalSeparator)} kg</span></p>
+            <p className="text-gray-700 dark:text-gray-300">Máx (+10%): <span className="font-bold">{formatNumber(analysis.max10, 3, decimalSeparator)} kg</span></p>
           </div>
         </div>
 
         <StatItem label="Aves dentro del rango" value={`${analysis.avesDentroRango} / ${analysis.totalAves}`} />
         <StatItem 
           label="Uniformidad" 
-          value={`${formatNumber(analysis.uniformidad, 1)} %`} 
-          valueClass={`${analysis.uniformidad >= 80 ? 'text-green-600' : 'text-orange-600'} text-2xl'}`}
+          value={`${formatNumber(analysis.uniformidad, 1, decimalSeparator)} %`} 
+          valueClass={`text-2xl ${analysis.uniformidad >= 75 ? 'text-green-600 dark:text-green-400' : analysis.uniformidad >= 50 ? 'text-orange-600 dark:text-orange-400' : 'text-red-600 dark:text-red-400'}`}
         />
         <StatItem label="Aves por debajo del rango" value={analysis.avesDebajoRango} valueClass="text-orange-600 dark:text-orange-400" />
         <StatItem label="Aves por encima del rango" value={analysis.avesEncimaRango} valueClass="text-blue-600 dark:text-blue-400" />
@@ -776,7 +1122,7 @@ const StatItem = ({ label, value, valueClass = "text-gray-800 dark:text-gray-100
 );
 
 // Componente: Historial de Registros
-const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll }) => {
+const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, decimalSeparator }) => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
       <div className="flex items-center justify-between mb-4">
@@ -786,7 +1132,7 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll }) => {
         </div>
         <button
           onClick={onExportAll}
-          className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
         >
           <Download className="w-4 h-4" />
           Exportar Todo
@@ -816,23 +1162,23 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll }) => {
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300 font-semibold">{registro.corral}</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{registro.edad} días</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{registro.analysis.totalAves}</td>
-                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{formatNumber(registro.analysis.promedio, 3)} kg</td>
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{formatNumber(registro.analysis.promedio, 3, decimalSeparator)} kg</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                     <span className={`font-semibold ${registro.analysis.uniformidad >= 75 ? 'text-green-600' : 'text-orange-600'}`}>
-                      {formatNumber(registro.analysis.uniformidad, 1)} %
+                      {formatNumber(registro.analysis.uniformidad, 1, decimalSeparator)} %
                     </span>
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex gap-2 justify-center">
                       <button
                         onClick={() => onLoad(registro)}
-                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs font-medium"
                       >
                         Cargar
                       </button>
                       <button
                         onClick={() => onDelete(registro.id)}
-                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs"
+                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs font-medium"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -856,7 +1202,9 @@ const PoultryWeightTracker = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [loadedRecordId, setLoadedRecordId] = useState(null);
-
+  const [decimalSeparator, setDecimalSeparator] = useState('coma');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
   const { theme, setTheme } = useDarkMode();
   const weightManager = useWeights(60);
   const { calculateAnalysis } = useAnalysis(weightManager.getValidWeights);
@@ -934,24 +1282,54 @@ const PoultryWeightTracker = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 p-4 transition-colors">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 p-2 sm:p-4 transition-colors">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col gap-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Scale className="w-8 h-8 text-green-600 dark:text-green-400" />
-              <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Registro de Pesos de Pollos</h1>
+              <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Registro de Pesos</h1>
             </div>
+
             <div className="flex items-center gap-3">
-              <ThemeSwitcher theme={theme} setTheme={setTheme} />
               <button
-                onClick={() => setShowHistory(!showHistory)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="md:hidden p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 transition-colors"
               >
-                <History className="w-5 h-5" />
-                Historial ({recordManager.registros.length})
+                {isMenuOpen ? (
+                  <X className="w-6 h-6 text-gray-800 dark:text-gray-100" />
+                ) : (
+                  <Menu className="w-6 h-6 text-gray-800 dark:text-gray-100" />
+                )}
               </button>
+
+              <div
+                className={`
+                  absolute md:static top-20 right-6
+                  bg-white dark:bg-gray-800 md:bg-transparent
+                  rounded-lg shadow-lg md:shadow-none
+                  p-4 md:p-0 z-50
+                  flex flex-col md:flex-row
+                  gap-4 md:gap-3
+                  transition-all duration-300
+                  md:flex
+                  ${isMenuOpen ? 'block' : 'hidden'}
+                `}
+              >
+                <ThemeSwitcher theme={theme} setTheme={setTheme} />
+                <DecimalSeparatorSwitcher decimalSeparator={decimalSeparator} setDecimalSeparator={setDecimalSeparator} />
+                <button
+                  onClick={() => {
+                    setShowHistory(!showHistory);
+                    setIsMenuOpen(false);
+                  }}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+                >
+                  <History className="w-5 h-5" />
+                  Historial ({recordManager.registros.length})
+                </button>
+              </div>
             </div>
           </div>
 
@@ -970,17 +1348,16 @@ const PoultryWeightTracker = () => {
           />
         </div>
 
-        {/* Historial */}
         {showHistory && (
           <HistorialRegistros
             registros={recordManager.registros}
             onDelete={handleDeleteRecord}
             onLoad={handleLoadRecord}
             onExportAll={() => exportUtils.exportAllToCSV(recordManager.registros)}
+            decimalSeparator={decimalSeparator}
           />
         )}
 
-        {/* Contenido Principal */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <TablaPesos
@@ -989,13 +1366,15 @@ const PoultryWeightTracker = () => {
               onWeightChange={weightManager.updateWeight}
               onClear={weightManager.clearWeights}
               onImport={() => setShowImportModal(true)}
+              decimalSeparator={decimalSeparator}
+              analysis={analysis}
+              weightManager={weightManager}
             />
           </div>
 
-          <PanelAnalisis analysis={analysis} />
+          <PanelAnalisis analysis={analysis} decimalSeparator={decimalSeparator} />
         </div>
 
-        {/* Info de registros guardados */}
         {recordManager.registros.length > 0 && !showHistory && (
           <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
             <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -1004,7 +1383,6 @@ const PoultryWeightTracker = () => {
           </div>
         )}
 
-        {/* Modal de importación */}
         <ImportModal
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}

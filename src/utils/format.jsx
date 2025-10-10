@@ -1,10 +1,17 @@
-  const formateadorDecimal = (numDecimales = 2, type = ',') => {
-    const region = type === '.' ? 'en-US' : 'es-ES'; 
-    return new Intl.NumberFormat(region, {
-      minimumFractionDigits: numDecimales, // Para mostrar dos decimales
-      maximumFractionDigits: numDecimales,
-      useGrouping: false // Para no usar separador de miles
-    });
-  };
+export const formatNumber = (num, decimals = 2, decimalSeparator = 'coma') => {
+  if (num === null || num === undefined || isNaN(num)) return '';
+  const locale = decimalSeparator === 'coma' ? 'es-ES' : 'en-US';
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: decimals, // Para mostrar dos decimales
+    maximumFractionDigits: decimals,
+    useGrouping: false // Para no usar separador de miles
+  }).format(num);
+};
 
-  export const formatNumber = (number, numDecimales, type) => formateadorDecimal(numDecimales, type).format(number)
+export const formatNumberForDisplay = (value, preferredSeparator) => {
+  if (value === null || value === undefined) return '';
+  const strValue = String(value);
+
+  // Reemplaza el separador interno (punto) por el preferido para mostrar
+  return strValue.replace('.', preferredSeparator);
+};

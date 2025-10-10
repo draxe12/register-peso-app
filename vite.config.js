@@ -5,6 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/register-peso-app/',
   plugins: [
     react(),
     tailwindcss(),
@@ -15,7 +16,9 @@ export default defineConfig({
         name: 'Registro de Pesos de Pollos',
         short_name: 'RegisterPeso',
         description: 'Registro de Pesos de Pollos para obtener promedio y uniformidad',
-        theme_color: '#ffffff',
+        background_color: '#1f2938', // Color de fondo para la splash screen
+        theme_color: '#1f2938',      // Color para la barra de título/dirección
+        lang: 'es',
         icons: [
           {
             "src": "/pwa-64x64.png",
@@ -42,5 +45,4 @@ export default defineConfig({
       }
     })
   ],
-  base: '/register-peso-app/'
 })

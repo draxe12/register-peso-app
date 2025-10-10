@@ -1,9 +1,17 @@
+
+  
 import React, { useState, useRef, useEffect } from 'react';
 import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
 import Icon from '@mdi/react';
 import { mdiSquareMedium, mdiComma, mdiMenuUp, mdiMenuDown } from '@mdi/js';
 
 // ==================== UTILIDADES DE FORMATO ====================
+/* const formatNumber = (value, decimals, separator) => {
+  if (value === null || value === undefined || isNaN(value)) return '0';
+  const fixed = Number(value).toFixed(decimals);
+  return separator === 'coma' ? fixed.replace('.', ',') : fixed;
+};
+ */
 const formatNumber = (value, decimals, separator) => {
     if (value === null || value === undefined || isNaN(value)) return '0';
     const factor = Math.pow(10, decimals);
@@ -120,11 +128,10 @@ const useWeights = (initialSize = 60) => {
     setIsLoadedFromHistory(true);
   };
 
-  const optimizeUniformity = (targetUniformity = 80) => {
+  const optimizeUniformity = (targetMin = 75, targetMax = 85) => {
     const validIndices = [];
     const validWeights = [];
     
-    // Obtener índices y valores válidos
     weights.forEach((w, idx) => {
       if (w !== '' && !isNaN(parseFloat(w))) {
         validIndices.push(idx);
@@ -136,47 +143,37 @@ const useWeights = (initialSize = 60) => {
       return { success: false, message: 'Se necesitan al menos 3 pesos válidos para optimizar' };
     }
 
-    // Función para redondear a 2 decimales pares
     const roundToEvenDecimals = (value) => {
-      // Redondear a 2 decimales
       let rounded = Math.round(value * 100) / 100;
-      // Obtener la parte decimal (ej: 2.47 -> 47)
       let decimalPart = Math.round((rounded % 1) * 100);
       
-      // Si es impar, ajustar al par más cercano
       if (decimalPart % 2 !== 0) {
-        // Alternar entre redondear hacia arriba o abajo
         if (Math.random() < 0.5) {
           decimalPart += 1;
         } else {
           decimalPart -= 1;
         }
-        // Reconstruir el número
         rounded = Math.floor(rounded) + (decimalPart / 100);
       }
       
       return parseFloat(rounded.toFixed(2));
     };
 
-    // Calcular estadísticas actuales
     const promedio = validWeights.reduce((sum, w) => sum + w, 0) / validWeights.length;
     const rango10 = promedio * 0.1;
     const min10 = promedio - rango10;
     const max10 = promedio + rango10;
 
-    // Calcular uniformidad actual
     const dentroRango = validWeights.filter(w => w >= min10 && w <= max10).length;
     const uniformidadActual = (dentroRango / validWeights.length) * 100;
 
-    // Determinar si necesitamos subir o bajar uniformidad
-    const needsIncrease = uniformidadActual < 75;
-    const needsDecrease = uniformidadActual > 85;
+    const needsIncrease = uniformidadActual < targetMin;
+    const needsDecrease = uniformidadActual > targetMax;
 
     if (!needsIncrease && !needsDecrease) {
-      return { success: false, message: 'La uniformidad ya está en el rango óptimo (75%-85%)' };
+      return { success: false, message: `La uniformidad (${uniformidadActual.toFixed(1)}%) ya está en el rango objetivo (${targetMin}%-${targetMax}%)` };
     }
 
-    // Organizar pesos por columnas (3 columnas)
     const columns = 3;
     const columnGroups = [[], [], []];
 
@@ -193,20 +190,15 @@ const useWeights = (initialSize = 60) => {
     let totalAdjusted = 0;
 
     if (needsIncrease) {
-      // SUBIR UNIFORMIDAD: Acercar pesos al rango
       columnGroups.forEach(columnWeights => {
         if (columnWeights.length === 0) return;
 
-        // Calcular suma original de la columna
         const originalSum = columnWeights.reduce((sum, w) => sum + w.weight, 0);
-
-        // Identificar pesos fuera de rango en esta columna
         const outOfRange = columnWeights.filter(w => !w.inRange);
         const inRange = columnWeights.filter(w => w.inRange);
 
         if (outOfRange.length === 0 || inRange.length === 0) return;
 
-        // Ajustar pesos fuera de rango
         const adjustedWeights = new Map();
 
         outOfRange.forEach(item => {
@@ -223,13 +215,11 @@ const useWeights = (initialSize = 60) => {
           adjustedWeights.set(item.index, targetWeight);
         });
 
-        // Calcular diferencia total
         let totalDiff = 0;
         outOfRange.forEach(item => {
           totalDiff += adjustedWeights.get(item.index) - item.weight;
         });
 
-        // Compensar en los pesos dentro del rango
         const compensationPerWeight = -totalDiff / inRange.length;
         
         inRange.forEach(item => {
@@ -238,7 +228,6 @@ const useWeights = (initialSize = 60) => {
           adjustedWeights.set(item.index, compensated);
         });
 
-        // Ajustar para mantener suma exacta
         let newSum = 0;
         columnWeights.forEach(item => {
           newSum += adjustedWeights.get(item.index);
@@ -247,7 +236,6 @@ const useWeights = (initialSize = 60) => {
         const sumDiff = originalSum - newSum;
         
         if (Math.abs(sumDiff) > 0.001) {
-          // Distribuir la diferencia en pasos de 0.02 (par)
           const adjustmentStep = sumDiff > 0 ? 0.02 : -0.02;
           let remaining = sumDiff;
           let idx = 0;
@@ -262,7 +250,6 @@ const useWeights = (initialSize = 60) => {
           }
         }
 
-        // Aplicar cambios
         adjustedWeights.forEach((weight, index) => {
           newWeights[index] = weight.toFixed(2);
         });
@@ -278,14 +265,11 @@ const useWeights = (initialSize = 60) => {
       };
 
     } else {
-      // BAJAR UNIFORMIDAD: Sacar pesos del rango
       columnGroups.forEach(columnWeights => {
         if (columnWeights.length === 0) return;
 
-        // Calcular suma original de la columna
         const originalSum = columnWeights.reduce((sum, w) => sum + w.weight, 0);
 
-        // Buscar pesos DENTRO del rango más cercanos a los límites
         const nearLimits = columnWeights
           .filter(w => w.inRange)
           .map(w => ({
@@ -307,7 +291,6 @@ const useWeights = (initialSize = 60) => {
 
         const adjustedWeights = new Map();
 
-        // Sacar pesos del rango
         toAdjust.forEach(item => {
           const currentWeight = item.weight;
           let targetWeight;
@@ -322,13 +305,11 @@ const useWeights = (initialSize = 60) => {
           adjustedWeights.set(item.index, targetWeight);
         });
 
-        // Calcular diferencia total
         let totalDiff = 0;
         toAdjust.forEach(item => {
           totalDiff += adjustedWeights.get(item.index) - item.weight;
         });
 
-        // Compensar en los pesos restantes
         const compensationPerWeight = -totalDiff / remaining.length;
         
         remaining.forEach(item => {
@@ -337,7 +318,6 @@ const useWeights = (initialSize = 60) => {
           adjustedWeights.set(item.index, compensated);
         });
 
-        // Ajustar para mantener suma exacta
         let newSum = 0;
         columnWeights.forEach(item => {
           newSum += adjustedWeights.get(item.index);
@@ -360,7 +340,6 @@ const useWeights = (initialSize = 60) => {
           }
         }
 
-        // Aplicar cambios
         adjustedWeights.forEach((weight, index) => {
           newWeights[index] = weight.toFixed(2);
         });
@@ -625,6 +604,111 @@ const ThemeSwitcher = ({ theme, setTheme }) => {
   );
 };
 
+// Componente: Modal de Optimización de Uniformidad
+const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformity }) => {
+  const [targetMin, setTargetMin] = useState(75);
+  const [targetMax, setTargetMax] = useState(85);
+
+  if (!isOpen) return null;
+
+  const handleOptimize = () => {
+    if (targetMin >= targetMax) {
+      alert('El mínimo debe ser menor que el máximo');
+      return;
+    }
+    if (targetMin < 50 || targetMax > 95) {
+      alert('Los valores deben estar entre 50% y 95%');
+      return;
+    }
+    onOptimize(targetMin, targetMax);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+            <Sparkles className="w-6 h-6 inline mr-2 text-purple-600" />
+            Optimizar Uniformidad
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="mb-6">
+          <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg mb-4">
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              <strong>Uniformidad actual:</strong> {currentUniformity?.toFixed(1)}%
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+              {currentUniformity < 75 ? '📈 Se aumentará la uniformidad' : '📉 Se reducirá la uniformidad'}
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Uniformidad Mínima Deseada (%)
+              </label>
+              <input
+                type="number"
+                min="50"
+                max="95"
+                value={targetMin}
+                onChange={(e) => setTargetMin(parseInt(e.target.value) || 75)}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Uniformidad Máxima Deseada (%)
+              </label>
+              <input
+                type="number"
+                min="50"
+                max="95"
+                value={targetMax}
+                onChange={(e) => setTargetMax(parseInt(e.target.value) || 85)}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              💡 <strong>Recomendado:</strong> 75% - 85%
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+              ℹ️ El algoritmo ajustará los pesos manteniendo el promedio y las sumatorias por columna
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleOptimize}
+            className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all font-medium"
+          >
+            Optimizar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Componente: Modal de Importación
 const ImportModal = ({ isOpen, onClose, onImport }) => {
   const [textInput, setTextInput] = useState('');
@@ -679,21 +763,57 @@ const ImportModal = ({ isOpen, onClose, onImport }) => {
         logger: m => console.log(m)
       });
       
+      // Configuración mejorada para números
+      await worker.setParameters({
+        tessedit_char_whitelist: '0123456789.,', // Solo números, puntos y comas
+        tessedit_pageseg_mode: window.Tesseract.PSM.SPARSE_TEXT,
+      });
+      
       const { data: { text } } = await worker.recognize(file);
       await worker.terminate();
 
-      const numbersArray = text.match(/\d+\.?\d*/g) || [];
-      const validNumbers = numbersArray
-        .map(n => parseFloat(n))
-        .filter(n => !isNaN(n) && n > 0 && n < 10)
-        .map(n => n.toFixed(2));
+      console.log('Texto OCR raw:', text);
+
+      // Extraer números de forma más robusta
+      const lines = text.split('\n');
+      const validNumbers = [];
+
+      lines.forEach(line => {
+        // Buscar patrones de números decimales
+        const numberPattern = /(\d+)[.,](\d{1,2})/g;
+        let match;
+        
+        while ((match = numberPattern.exec(line)) !== null) {
+          const intPart = match[1];
+          const decPart = match[2].padEnd(2, '0'); // Asegurar 2 decimales
+          const number = parseFloat(`${intPart}.${decPart}`);
+          
+          // Validar que sea un peso razonable (0.5 a 10 kg)
+          if (number >= 0.5 && number <= 10) {
+            validNumbers.push(number.toFixed(2));
+          }
+        }
+      });
+
+      // También intentar con espacios como separadores
+      const allText = text.replace(/[,]/g, '.').replace(/\s+/g, ' ');
+      const matches = allText.match(/\d+\.\d{1,2}/g) || [];
+      
+      matches.forEach(match => {
+        const number = parseFloat(match);
+        if (number >= 0.5 && number <= 10 && !validNumbers.includes(number.toFixed(2))) {
+          validNumbers.push(number.toFixed(2));
+        }
+      });
+
+      console.log('Números válidos encontrados:', validNumbers);
 
       if (validNumbers.length > 0) {
         const numbersText = validNumbers.join(' ');
         setTextInput(numbersText);
-        alert(`✅ OCR completado. Se encontraron ${validNumbers.length} números. Revisa y confirma.`);
+        alert(`✅ OCR completado. Se encontraron ${validNumbers.length} números. Revisa y confirma antes de importar.`);
       } else {
-        alert('❌ No se encontraron números válidos en la imagen. Intenta con otra foto más clara.');
+        alert('❌ No se encontraron números válidos en la imagen. Asegúrate de que:\n- La imagen sea clara y legible\n- Los números estén en formato X.XX\n- Intenta con mejor iluminación');
       }
     } catch (error) {
       alert('❌ Error al procesar la imagen: ' + error.message);
@@ -731,7 +851,7 @@ const ImportModal = ({ isOpen, onClose, onImport }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
@@ -901,7 +1021,7 @@ const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNu
 };
 
 // Componente: Tabla de Pesos
-const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, decimalSeparator, analysis, weightManager }) => {
+const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onOptimize, decimalSeparator, analysis, weightManager }) => {
   const columns = 3;
   const rows = Math.ceil(numUnidades / columns);
 
@@ -928,16 +1048,9 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
         <div className="flex flex-wrap gap-2">
           {analysis && (analysis.uniformidad < 75 || analysis.uniformidad > 85) && (
             <button
-              onClick={() => {
-                const result = weightManager.optimizeUniformity(80);
-                if (result.success) {
-                  alert(`✅ ${result.message}`);
-                } else {
-                  alert(`ℹ️ ${result.message}`);
-                }
-              }}
-              className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium shadow-md"
-              title={analysis.uniformidad < 75 ? "Aumentar uniformidad" : "Reducir uniformidad al rango óptimo"}
+              onClick={onOptimize}
+              className="flex flex-auto items-center justify-center px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium gap-2 shadow-md"
+              title="Optimizar uniformidad"
             >
               <Sparkles className="w-4 h-4" />
               {analysis.uniformidad < 75 ? '↑ Optimizar' : '↓ Ajustar'}
@@ -945,7 +1058,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
           )}
           <button
             onClick={onImport}
-            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+            className="flex flex-auto items-center justify-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium gap-2"
           >
             <Upload className="w-4 h-4" />
             Importar
@@ -998,7 +1111,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
                   function modificarValor(direccion) {
                     const currentValue = parseFloat(weights[idx]) || 0;
                     const xtra = esDecimalParConDosDigitos(currentValue) ? 0 : 0.01;
-                    const newValue = direccion === 'arriba' ? (currentValue + valorStep - xtra).toFixed(2) :  Math.max(0, currentValue - valorStep + xtra).toFixed(2);
+                    const newValue = direccion === 'arriba' ? (currentValue + valorStep - xtra).toFixed(2) : Math.max(0, currentValue - valorStep + xtra).toFixed(2);
                     onWeightChange(idx, newValue);
                   }
 
@@ -1007,9 +1120,9 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
                     valueToProcess = valueToProcess.replace(',', '.');
                     onWeightChange(idx, valueToProcess);
                   }
-                  
+
                   return (
-                    <td 
+                    <td
                       key={colIdx}
                       className="border border-gray-300 dark:border-gray-600 p-0 relative group"
                     >
@@ -1021,26 +1134,26 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
                         className="w-full px-2 py-2 pr-8 text-center border-none focus:ring-2 focus:ring-blue-400 focus:outline-none bg-transparent text-gray-900 dark:text-gray-100 text-sm sm:text-base"
                         placeholder={`${formatNumber(0, 2, decimalSeparator)}`}
                       />
-                      
+
                       <div className="hidden group-hover:flex flex-col absolute right-2 top-1/2 -translate-y-1/2">
-                          <button
-                              onClick={() => modificarValor('arriba')}
-                              tabIndex={-1}
-                              className="p-0 rounded-t bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
-                              title="Incrementar peso"
-                          >
-                              {/* <ChevronUp className="w-3 h-3 text-gray-700 dark:text-gray-300" /> */}
-                              <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiMenuUp} />
-                          </button>
-                          <button
-                              onClick={() => modificarValor('abajo')}
-                              tabIndex={-1}
-                              className="p-0 rounded-b bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
-                              title="Decrementar peso"
-                          >
-                              {/* <ChevronDown className="w-3 h-3 text-gray-700 dark:text-gray-300" /> */}
-                              <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiMenuDown} />
-                          </button>
+                        <button
+                          onClick={() => modificarValor('arriba')}
+                          tabIndex={-1}
+                          className="rounded-t bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
+                          title="Incrementar peso"
+                        >
+                          {/* <ChevronUp className="w-3 h-3 text-gray-700 dark:text-gray-300" /> */}
+                          <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiMenuUp} />
+                        </button>
+                        <button
+                          onClick={() => modificarValor('abajo')}
+                          tabIndex={-1}
+                          className="rounded-b bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
+                          title="Decrementar peso"
+                        >
+                          {/* <ChevronDown className="w-3 h-3 text-gray-700 dark:text-gray-300" /> */}
+                          <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiMenuDown} />
+                        </button>
                       </div>
                     </td>
                   );
@@ -1173,15 +1286,15 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, decimalS
             <tbody>
               {registros.map(registro => (
                 <tr key={registro.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{registro.fecha}</td>
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300 truncate max-w-sm">{registro.fecha}</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300 font-semibold">{registro.corral}</td>
-                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{registro.edad} días</td>
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{registro.edad} días</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{registro.analysis.totalAves}</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                     <span className="font-semibold text-green-600">
                       {formatNumber(registro.analysis.promedio, 3, decimalSeparator)} kg
                     </span>
-                  </td>
+                  </td>                  
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                     <span className={`font-semibold ${registro.analysis.uniformidad >= 75 ? 'text-green-600' : registro.analysis.uniformidad >= 50  ?'text-orange-600' : 'text-red-600'}`}>
                       {formatNumber(registro.analysis.uniformidad, 1, decimalSeparator)} %
@@ -1220,6 +1333,7 @@ const PoultryWeightTracker = () => {
   const [edad, setEdad] = useState('7');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showOptimizeModal, setShowOptimizeModal] = useState(false);
   const [loadedRecordId, setLoadedRecordId] = useState(null);
   const [decimalSeparator, setDecimalSeparator] = useState('coma');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -1385,6 +1499,7 @@ const PoultryWeightTracker = () => {
               onWeightChange={weightManager.updateWeight}
               onClear={weightManager.clearWeights}
               onImport={() => setShowImportModal(true)}
+              onOptimize={() => setShowOptimizeModal(true)}
               decimalSeparator={decimalSeparator}
               analysis={analysis}
               weightManager={weightManager}
@@ -1406,6 +1521,20 @@ const PoultryWeightTracker = () => {
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
           onImport={weightManager.importWeightsFromText}
+        />
+
+        <OptimizeUniformityModal
+          isOpen={showOptimizeModal}
+          onClose={() => setShowOptimizeModal(false)}
+          onOptimize={(targetMin, targetMax) => {
+            const result = weightManager.optimizeUniformity(targetMin, targetMax);
+            if (result.success) {
+              alert(`✅ ${result.message}`);
+            } else {
+              alert(`ℹ️ ${result.message}`);
+            }
+          }}
+          currentUniformity={analysis?.uniformidad}
         />
       </div>
     </div>

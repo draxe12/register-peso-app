@@ -936,7 +936,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
                   alert(`ℹ️ ${result.message}`);
                 }
               }}
-              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium flex items-center gap-2 shadow-md"
+              className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium shadow-md"
               title={analysis.uniformidad < 75 ? "Aumentar uniformidad" : "Reducir uniformidad al rango óptimo"}
             >
               <Sparkles className="w-4 h-4" />
@@ -945,14 +945,14 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
           )}
           <button
             onClick={onImport}
-            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium flex items-center gap-2"
+            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
           >
             <Upload className="w-4 h-4" />
             Importar
           </button>
           <button
             onClick={onClear}
-            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
+            className="flex flex-auto items-center justify-center px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
           >
             Limpiar
           </button>
@@ -980,6 +980,33 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
                   if (idx >= numUnidades) {
                     return <td key={colIdx} className="border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-900"></td>;
                   }
+
+                  function esDecimalParConDosDigitos(numero) {
+                    const numeroComoCadena = numero.toFixed(2);
+                    const puntoDecimalIndex = numeroComoCadena.indexOf('.');
+                    if (puntoDecimalIndex === -1) {
+                      return false;
+                    }
+                    const parteDecimalComoCadena = numeroComoCadena.substring(puntoDecimalIndex + 1);
+                    const parteDecimalComoNumero = parseInt(parteDecimalComoCadena, 10);
+                    return parteDecimalComoNumero % 2 === 0;
+                  }
+
+
+                  let valorStep = 0.02; // Valor para cada incremento
+                  // Función para modificar el valor
+                  function modificarValor(direccion) {
+                    const currentValue = parseFloat(weights[idx]) || 0;
+                    const xtra = esDecimalParConDosDigitos(currentValue) ? 0 : 0.01;
+                    const newValue = direccion === 'arriba' ? (currentValue + valorStep - xtra).toFixed(2) :  Math.max(0, currentValue - valorStep + xtra).toFixed(2);
+                    onWeightChange(idx, newValue);
+                  }
+
+                  function ingresarValor(value) {
+                    let valueToProcess = String(value);
+                    valueToProcess = valueToProcess.replace(',', '.');
+                    onWeightChange(idx, valueToProcess);
+                  }
                   
                   return (
                     <td 
@@ -990,22 +1017,14 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
                         type="text"
                         inputMode="decimal"
                         value={formatNumberForDisplay(weights[idx], decimalSeparator === 'coma' ? ',' : '.')}
-                        onChange={(e) => {
-                          let valueToProcess = String(e.target.value);
-                          valueToProcess = valueToProcess.replace(',', '.');
-                          onWeightChange(idx, valueToProcess);
-                        }}
+                        onChange={(e) => ingresarValor(e.target.value)}
                         className="w-full px-2 py-2 pr-8 text-center border-none focus:ring-2 focus:ring-blue-400 focus:outline-none bg-transparent text-gray-900 dark:text-gray-100 text-sm sm:text-base"
                         placeholder={`${formatNumber(0, 2, decimalSeparator)}`}
                       />
                       
                       <div className="hidden group-hover:flex flex-col absolute right-2 top-1/2 -translate-y-1/2">
                           <button
-                              onClick={() => {
-                                  const currentValue = parseFloat(weights[idx]) || 0;
-                                  const newValue = (currentValue + 0.01).toFixed(2);
-                                  onWeightChange(idx, newValue);
-                              }}
+                              onClick={() => modificarValor('arriba')}
                               tabIndex={-1}
                               className="p-0 rounded-t bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
                               title="Incrementar peso"
@@ -1014,11 +1033,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
                               <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiMenuUp} />
                           </button>
                           <button
-                              onClick={() => {
-                                  const currentValue = parseFloat(weights[idx]) || 0;
-                                  const newValue = Math.max(0, currentValue - 0.01).toFixed(2);
-                                  onWeightChange(idx, newValue);
-                              }}
+                              onClick={() => modificarValor('abajo')}
                               tabIndex={-1}
                               className="p-0 rounded-b bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
                               title="Decrementar peso"
@@ -1040,7 +1055,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
               </td>
               {columnSums.map((sum, colIdx) => (
                 <td key={colIdx} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center font-bold text-blue-700 dark:text-blue-300">
-                  {formatNumber(sum, 3, decimalSeparator)}
+                  {formatNumber(sum, 2, decimalSeparator)}
                 </td>
               ))}
             </tr>
@@ -1049,7 +1064,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, d
                 Total
               </td>
               <td colSpan={columns} className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center font-bold text-green-700 dark:text-green-300 text-lg">
-                {formatNumber(totalSum, 3, decimalSeparator)} kg
+                {formatNumber(totalSum, 2, decimalSeparator)} kg
               </td>
             </tr>
           </tfoot>
@@ -1094,7 +1109,7 @@ const PanelAnalisis = ({ analysis, decimalSeparator }) => {
         <div className="bg-blue-50 dark:bg-blue-900/30 p-3 rounded-lg mt-4">
           <p className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-2">Rango ±10%</p>
           <div className="space-y-1 text-sm">
-            <p className="text-gray-700 dark:text-gray-300">Rango: <span className="font-bold">{formatNumber(analysis.rango10, 3, decimalSeparator)} kg</span></p>
+            <p className="text-gray-700 dark:text-gray-300">Rango (10%): <span className="font-bold">{formatNumber(analysis.rango10, 3, decimalSeparator)} kg</span></p>
             <p className="text-gray-700 dark:text-gray-300">Mín (-10%): <span className="font-bold">{formatNumber(analysis.min10, 3, decimalSeparator)} kg</span></p>
             <p className="text-gray-700 dark:text-gray-300">Máx (+10%): <span className="font-bold">{formatNumber(analysis.max10, 3, decimalSeparator)} kg</span></p>
           </div>
@@ -1104,7 +1119,7 @@ const PanelAnalisis = ({ analysis, decimalSeparator }) => {
         <StatItem 
           label="Uniformidad" 
           value={`${formatNumber(analysis.uniformidad, 1, decimalSeparator)} %`} 
-          valueClass={`text-2xl ${analysis.uniformidad >= 75 ? 'text-green-600 dark:text-green-400' : analysis.uniformidad >= 50 ? 'text-orange-600 dark:text-orange-400' : 'text-red-600 dark:text-red-400'}`}
+          valueClass={`text-2xl ${analysis.uniformidad >= 75 ? 'text-green-600' : analysis.uniformidad >= 50 ? 'text-orange-600' : 'text-red-600'}`}
         />
         <StatItem label="Aves por debajo del rango" value={analysis.avesDebajoRango} valueClass="text-orange-600 dark:text-orange-400" />
         <StatItem label="Aves por encima del rango" value={analysis.avesEncimaRango} valueClass="text-blue-600 dark:text-blue-400" />
@@ -1125,14 +1140,14 @@ const StatItem = ({ label, value, valueClass = "text-gray-800 dark:text-gray-100
 const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, decimalSeparator }) => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <History className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Historial de Registros</h2>
         </div>
         <button
           onClick={onExportAll}
-          className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
         >
           <Download className="w-4 h-4" />
           Exportar Todo
@@ -1162,9 +1177,13 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, decimalS
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300 font-semibold">{registro.corral}</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{registro.edad} días</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{registro.analysis.totalAves}</td>
-                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{formatNumber(registro.analysis.promedio, 3, decimalSeparator)} kg</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
-                    <span className={`font-semibold ${registro.analysis.uniformidad >= 75 ? 'text-green-600' : 'text-orange-600'}`}>
+                    <span className="font-semibold text-green-600">
+                      {formatNumber(registro.analysis.promedio, 3, decimalSeparator)} kg
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                    <span className={`font-semibold ${registro.analysis.uniformidad >= 75 ? 'text-green-600' : registro.analysis.uniformidad >= 50  ?'text-orange-600' : 'text-red-600'}`}>
                       {formatNumber(registro.analysis.uniformidad, 1, decimalSeparator)} %
                     </span>
                   </td>

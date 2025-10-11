@@ -16,8 +16,8 @@ export default defineConfig({
         name: 'Registro de Pesos de Pollos',
         short_name: 'Registro de Pesos',
         description: 'Registro de Pesos de Pollos para obtener promedio y uniformidad',
-        background_color: '#1f2938', // Color de fondo para la splash screen
-        theme_color: '#1f2938',      // Color para la barra de título/dirección
+        background_color: '#FFE98B', // Color de fondo para la splash screen
+        theme_color: '#FFE98B',      // Color para la barra de título/dirección
         lang: 'es',
         icons: [
           {

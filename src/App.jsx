@@ -1,17 +1,7 @@
-
-  
 import React, { useState, useRef, useEffect } from 'react';
-import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
-import Icon from '@mdi/react';
-import { mdiSquareMedium, mdiComma, mdiMenuUp, mdiMenuDown } from '@mdi/js';
+import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles } from 'lucide-react';
 
 // ==================== UTILIDADES DE FORMATO ====================
-/* const formatNumber = (value, decimals, separator) => {
-  if (value === null || value === undefined || isNaN(value)) return '0';
-  const fixed = Number(value).toFixed(decimals);
-  return separator === 'coma' ? fixed.replace('.', ',') : fixed;
-};
- */
 const formatNumber = (value, decimals, separator) => {
     if (value === null || value === undefined || isNaN(value)) return '0';
     const factor = Math.pow(10, decimals);
@@ -69,6 +59,8 @@ const useWeights = (initialSize = 60) => {
   const [weights, setWeights] = useState(Array(initialSize).fill(''));
   const [numUnidades, setNumUnidades] = useState(initialSize);
   const [isLoadedFromHistory, setIsLoadedFromHistory] = useState(false);
+  const [backupWeights, setBackupWeights] = useState(null);
+  const [backupNumUnidades, setBackupNumUnidades] = useState(null);
 
   const updateWeight = (index, value) => {
     const newWeights = [...weights];
@@ -87,6 +79,8 @@ const useWeights = (initialSize = 60) => {
   const clearWeights = () => {
     setWeights(Array(numUnidades).fill(''));
     setIsLoadedFromHistory(false);
+    setBackupWeights(null);
+    setBackupNumUnidades(null);
   };
 
   const getValidWeights = () => {
@@ -126,6 +120,8 @@ const useWeights = (initialSize = 60) => {
     setNumUnidades(size);
     setWeights([...loadedWeights]);
     setIsLoadedFromHistory(true);
+    setBackupWeights(null);
+    setBackupNumUnidades(null);
   };
 
   const optimizeUniformity = (targetMin = 75, targetMax = 85) => {
@@ -142,6 +138,10 @@ const useWeights = (initialSize = 60) => {
     if (validWeights.length < 3) {
       return { success: false, message: 'Se necesitan al menos 3 pesos válidos para optimizar' };
     }
+
+    // GUARDAR BACKUP ANTES DE OPTIMIZAR
+    setBackupWeights([...weights]);
+    setBackupNumUnidades(numUnidades);
 
     const roundToEvenDecimals = (value) => {
       let rounded = Math.round(value * 100) / 100;
@@ -356,6 +356,22 @@ const useWeights = (initialSize = 60) => {
     }
   };
 
+  const restoreBackup = () => {
+    if (backupWeights) {
+      setWeights([...backupWeights]);
+      setNumUnidades(backupNumUnidades);
+      setBackupWeights(null);
+      setBackupNumUnidades(null);
+      return { success: true, message: 'Pesos originales restaurados' };
+    }
+    return { success: false, message: 'No hay backup disponible' };
+  };
+
+  const discardBackup = () => {
+    setBackupWeights(null);
+    setBackupNumUnidades(null);
+  };
+
   return {
     weights,
     numUnidades,
@@ -367,7 +383,10 @@ const useWeights = (initialSize = 60) => {
     importWeightsFromText,
     loadWeights,
     isLoadedFromHistory,
-    optimizeUniformity
+    optimizeUniformity,
+    backupWeights,
+    restoreBackup,
+    discardBackup
   };
 };
 
@@ -555,22 +574,47 @@ const exportUtils = {
 
 // ==================== COMPONENTES ====================
 
+// Iconos SVG personalizados
+const CommaIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M10 7A3 3 0 0 1 13 10V13A3 3 0 0 1 7 13V10A3 3 0 0 1 10 7M10 9A1 1 0 0 0 9 10V13A1 1 0 0 0 11 13V10A1 1 0 0 0 10 9M17 7A3 3 0 0 1 20 10V13A3 3 0 0 1 14 13V10A3 3 0 0 1 17 7M17 9A1 1 0 0 0 16 10V13A1 1 0 0 0 18 13V10A1 1 0 0 0 17 9M5 14A1 1 0 0 0 4 15L5 18H6V15A1 1 0 0 0 5 14Z" />
+  </svg>
+);
+
+const DotIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M10 7A3 3 0 0 0 7 10V13A3 3 0 0 0 13 13V10A3 3 0 0 0 10 7M11 13A1 1 0 0 1 9 13V10A1 1 0 0 1 11 10M17 7A3 3 0 0 0 14 10V13A3 3 0 0 0 20 13V10A3 3 0 0 0 17 7M18 13A1 1 0 0 1 16 13V10A1 1 0 0 1 18 10M6 15A1 1 0 1 1 5 14A1 1 0 0 1 6 15Z" />
+  </svg>
+);
+
+const ChevronUpIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <polyline points="18 15 12 9 6 15" />
+  </svg>
+);
+
+const ChevronDownIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
 // Componente: Decimal Separator Switcher
 const DecimalSeparatorSwitcher = ({ decimalSeparator, setDecimalSeparator }) => (
   <div className="flex gap-2 justify-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
     <button
       onClick={() => setDecimalSeparator('coma')}
-      className={`p-2 rounded text-gray-700 dark:text-gray-300 ${decimalSeparator === 'coma' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
+      className={`p-1 rounded text-gray-700 dark:text-gray-300 ${decimalSeparator === 'coma' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
       title="Separador decimal: coma (1,23)"
     >
-      <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiComma} />
+      <CommaIcon />
     </button>
     <button
       onClick={() => setDecimalSeparator('punto')}
-      className={`p-2 rounded text-gray-700 dark:text-gray-300 ${decimalSeparator === 'punto' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
+      className={`p-1 rounded text-gray-700 dark:text-gray-300 ${decimalSeparator === 'punto' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
       title="Separador decimal: punto (1.23)"
     >
-      <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiSquareMedium} />
+      <DotIcon />
     </button>
   </div>
 );
@@ -763,9 +807,8 @@ const ImportModal = ({ isOpen, onClose, onImport }) => {
         logger: m => console.log(m)
       });
       
-      // Configuración mejorada para números
       await worker.setParameters({
-        tessedit_char_whitelist: '0123456789.,', // Solo números, puntos y comas
+        tessedit_char_whitelist: '0123456789.,',
         tessedit_pageseg_mode: window.Tesseract.PSM.SPARSE_TEXT,
       });
       
@@ -774,28 +817,24 @@ const ImportModal = ({ isOpen, onClose, onImport }) => {
 
       console.log('Texto OCR raw:', text);
 
-      // Extraer números de forma más robusta
       const lines = text.split('\n');
       const validNumbers = [];
 
       lines.forEach(line => {
-        // Buscar patrones de números decimales
         const numberPattern = /(\d+)[.,](\d{1,2})/g;
         let match;
         
         while ((match = numberPattern.exec(line)) !== null) {
           const intPart = match[1];
-          const decPart = match[2].padEnd(2, '0'); // Asegurar 2 decimales
+          const decPart = match[2].padEnd(2, '0');
           const number = parseFloat(`${intPart}.${decPart}`);
           
-          // Validar que sea un peso razonable (0.5 a 10 kg)
           if (number >= 0.5 && number <= 10) {
             validNumbers.push(number.toFixed(2));
           }
         }
       });
 
-      // También intentar con espacios como separadores
       const allText = text.replace(/[,]/g, '.').replace(/\s+/g, ' ');
       const matches = allText.match(/\d+\.\d{1,2}/g) || [];
       
@@ -1038,8 +1077,43 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
 
   const totalSum = columnSums.reduce((a, b) => a + b, 0);
 
+  const hasBackup = weightManager.backupWeights !== null;
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      {hasBackup && (
+        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-700 dark:text-yellow-300 text-sm font-medium">
+                💾 Backup disponible - Pesos originales guardados
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const result = weightManager.restoreBackup();
+                  alert(result.message);
+                }}
+                className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-xs font-medium"
+              >
+                ↺ Restaurar
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm('¿Descartar el backup? No podrás recuperar los pesos originales.')) {
+                    weightManager.discardBackup();
+                  }
+                }}
+                className="px-3 py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-xs font-medium"
+              >
+                ✕ Descartar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <Edit className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -1105,9 +1179,8 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
                     return parteDecimalComoNumero % 2 === 0;
                   }
 
-
-                  let valorStep = 0.02; // Valor para cada incremento
-                  // Función para modificar el valor
+                  let valorStep = 0.02;
+                  
                   function modificarValor(direccion) {
                     const currentValue = parseFloat(weights[idx]) || 0;
                     const xtra = esDecimalParConDosDigitos(currentValue) ? 0 : 0.01;
@@ -1139,20 +1212,18 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
                         <button
                           onClick={() => modificarValor('arriba')}
                           tabIndex={-1}
-                          className="rounded-t bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
+                          className="rounded-t text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
                           title="Incrementar peso"
                         >
-                          {/* <ChevronUp className="w-3 h-3 text-gray-700 dark:text-gray-300" /> */}
-                          <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiMenuUp} />
+                          <ChevronUpIcon />
                         </button>
                         <button
                           onClick={() => modificarValor('abajo')}
                           tabIndex={-1}
-                          className="rounded-b bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
+                          className="rounded-b text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
                           title="Decrementar peso"
                         >
-                          {/* <ChevronDown className="w-3 h-3 text-gray-700 dark:text-gray-300" /> */}
-                          <Icon className="w-4 h-4 text-gray-700 dark:text-gray-300" path={mdiMenuDown} />
+                          <ChevronDownIcon />
                         </button>
                       </div>
                     </td>
@@ -1241,7 +1312,6 @@ const PanelAnalisis = ({ analysis, decimalSeparator }) => {
   );
 };
 
-// Componente auxiliar para items de estadística
 const StatItem = ({ label, value, valueClass = "text-gray-800 dark:text-gray-100" }) => (
   <div className="border-b border-gray-200 dark:border-gray-700 pb-2">
     <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
@@ -1249,7 +1319,6 @@ const StatItem = ({ label, value, valueClass = "text-gray-800 dark:text-gray-100
   </div>
 );
 
-// Componente: Historial de Registros
 const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, decimalSeparator }) => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">

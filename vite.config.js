@@ -14,10 +14,10 @@ export default defineConfig({
       includeAssets: ['logo.svg', 'pwa-64x64.png', 'pwa-192x192.png', 'pwa-512x512.png', 'maskable-icon-512x512.png'], // Ajusta tus iconos
       manifest: {
         name: 'Registro de Pesos de Pollos',
-        short_name: 'Registro de Pesos',
-        description: 'Registro de Pesos de Pollos para obtener promedio y uniformidad',
+        short_name: 'Registro de Pesos de Pollos',
+        description: 'Registro de pesos de pollos para obtener promedio y uniformidad',
         background_color: '#FFE98B', // Color de fondo para la splash screen
-        theme_color: '#FFE98B',      // Color para la barra de título/dirección
+        theme_color: '#1E2838', //'#FFE98B',      // Color para la barra de título/dirección
         lang: 'es',
         icons: [
           {

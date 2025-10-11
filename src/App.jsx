@@ -1321,7 +1321,7 @@ const StatItem = ({ label, value, valueClass = "text-gray-800 dark:text-gray-100
 
 const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, decimalSeparator }) => {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 mb-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 mb-2 sm:mb-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <History className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -1487,7 +1487,7 @@ const PoultryWeightTracker = () => {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 p-2 sm:p-4 transition-colors">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col gap-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 mb-4 sm:mb-6">
+        <div className="flex flex-col gap-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 mb-2 sm:mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Scale className="w-8 h-8 text-green-600 dark:text-green-400" />
@@ -1560,7 +1560,7 @@ const PoultryWeightTracker = () => {
           />
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 sm:gap-6">
           <div className="lg:col-span-2">
             <TablaPesos
               weights={weightManager.weights}
@@ -1579,7 +1579,7 @@ const PoultryWeightTracker = () => {
         </div>
 
         {recordManager.registros.length > 0 && !showHistory && (
-          <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
+          <div className="mt-2 sm:mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
             <p className="text-sm text-gray-600 dark:text-gray-400">
               📊 Tienes <span className="font-bold text-green-600 dark:text-green-400">{recordManager.registros.length}</span> registro(s) guardado(s) en localStorage
             </p>

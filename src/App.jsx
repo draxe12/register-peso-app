@@ -69,10 +69,25 @@ const useWeights = (initialSize = 60) => {
   };
 
   const updateSize = (newSize) => {
-    const size = parseInt(newSize) || 60;
-    setNumUnidades(size);
+    const size = parseInt(newSize);
+    
+    // Permitir campo vacío temporalmente
+    if (newSize === '' || newSize === '0') {
+      setNumUnidades('');
+      return;
+    }
+    
+    // Validar que sea un número válido
+    if (isNaN(size) || size < 1) {
+      return;
+    }
+    
+    // Limitar el máximo a 300
+    const finalSize = Math.min(size, 300);
+    setNumUnidades(finalSize);
+    
     if (!isLoadedFromHistory) {
-      setWeights(Array(size).fill(''));
+      setWeights(Array(finalSize).fill(''));
     }
   };
 
@@ -139,9 +154,11 @@ const useWeights = (initialSize = 60) => {
       return { success: false, message: 'Se necesitan al menos 3 pesos válidos para optimizar' };
     }
 
-    // GUARDAR BACKUP ANTES DE OPTIMIZAR
-    setBackupWeights([...weights]);
-    setBackupNumUnidades(numUnidades);
+    // GUARDAR BACKUP SOLO SI NO EXISTE UNO (preservar el original)
+    if (!backupWeights) {
+      setBackupWeights([...weights]);
+      setBackupNumUnidades(numUnidades);
+    }
 
     const roundToEvenDecimals = (value) => {
       let rounded = Math.round(value * 100) / 100;
@@ -588,13 +605,13 @@ const DotIcon = () => (
 );
 
 const ChevronUpIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="18 15 12 9 6 15" />
   </svg>
 );
 
 const ChevronDownIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="6 9 12 15 18 9" />
   </svg>
 );
@@ -670,7 +687,7 @@ const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformit
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
             <Sparkles className="w-6 h-6 inline mr-2 text-purple-600" />
@@ -1028,6 +1045,12 @@ const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNu
           type="number"
           value={numUnidades}
           onChange={(e) => onNumUnidadesChange(e.target.value)}
+          onBlur={(e) => {
+            // Si está vacío al perder foco, establecer valor por defecto
+            if (e.target.value === '' || e.target.value === '0') {
+              onNumUnidadesChange('60');
+            }
+          }}
           min="1"
           max="300"
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
@@ -1083,9 +1106,9 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
       {hasBackup && (
         <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-yellow-700 dark:text-yellow-300 text-sm font-medium">
+              <span className="text-yellow-700 dark:text-yellow-300 text-sm font-medium text-center">
                 💾 Backup disponible - Pesos originales guardados
               </span>
             </div>
@@ -1095,7 +1118,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
                   const result = weightManager.restoreBackup();
                   alert(result.message);
                 }}
-                className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-xs font-medium"
+                className="whitespace-nowrap px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-xs font-medium"
               >
                 ↺ Restaurar
               </button>
@@ -1105,7 +1128,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
                     weightManager.discardBackup();
                   }
                 }}
-                className="px-3 py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-xs font-medium"
+                className="whitespace-nowrap px-3 py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-xs font-medium"
               >
                 ✕ Descartar
               </button>
@@ -1275,7 +1298,7 @@ const PanelAnalisis = ({ analysis, decimalSeparator }) => {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
       <div className="flex items-center gap-2 mb-4">
         <BarChart3 className="w-6 h-6 text-purple-600 dark:text-purple-400" />
         <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Análisis de Datos</h2>

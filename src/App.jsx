@@ -1080,7 +1080,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
   const hasBackup = weightManager.backupWeights !== null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
       {hasBackup && (
         <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg">
           <div className="flex items-center justify-between gap-3">
@@ -1262,7 +1262,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
 const PanelAnalisis = ({ analysis, decimalSeparator }) => {
   if (!analysis) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 className="w-6 h-6 text-purple-600 dark:text-purple-400" />
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Análisis de Datos</h2>
@@ -1275,7 +1275,7 @@ const PanelAnalisis = ({ analysis, decimalSeparator }) => {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
       <div className="flex items-center gap-2 mb-4">
         <BarChart3 className="w-6 h-6 text-purple-600 dark:text-purple-400" />
         <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Análisis de Datos</h2>
@@ -1321,7 +1321,7 @@ const StatItem = ({ label, value, valueClass = "text-gray-800 dark:text-gray-100
 
 const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, decimalSeparator }) => {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 mb-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <History className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -1579,7 +1579,7 @@ const PoultryWeightTracker = () => {
         </div>
 
         {recordManager.registros.length > 0 && !showHistory && (
-          <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4">
+          <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
             <p className="text-sm text-gray-600 dark:text-gray-400">
               📊 Tienes <span className="font-bold text-green-600 dark:text-green-400">{recordManager.registros.length}</span> registro(s) guardado(s) en localStorage
             </p>

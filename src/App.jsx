@@ -1,6 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles } from 'lucide-react';
 
+// Agregar estilos de animación
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes slide-in {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  .animate-slide-in {
+    animation: slide-in 0.3s ease-out;
+  }
+`;
+document.head.appendChild(style);
+
 // ==================== UTILIDADES DE FORMATO ====================
 const formatNumber = (value, decimals, separator) => {
     if (value === null || value === undefined || isNaN(value)) return '0';
@@ -71,18 +90,15 @@ const useWeights = (initialSize = 60) => {
   const updateSize = (newSize) => {
     const size = parseInt(newSize);
     
-    // Permitir campo vacío temporalmente
     if (newSize === '' || newSize === '0') {
       setNumUnidades('');
       return;
     }
     
-    // Validar que sea un número válido
     if (isNaN(size) || size < 1) {
       return;
     }
     
-    // Limitar el máximo a 300
     const finalSize = Math.min(size, 300);
     setNumUnidades(finalSize);
     
@@ -154,7 +170,6 @@ const useWeights = (initialSize = 60) => {
       return { success: false, message: 'Se necesitan al menos 3 pesos válidos para optimizar' };
     }
 
-    // GUARDAR BACKUP SOLO SI NO EXISTE UNO (preservar el original)
     if (!backupWeights) {
       setBackupWeights([...weights]);
       setBackupNumUnidades(numUnidades);
@@ -591,6 +606,99 @@ const exportUtils = {
 
 // ==================== COMPONENTES ====================
 
+// Sistema de Notificaciones
+const Toast = ({ message, type = 'info', onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const types = {
+    success: 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700 text-green-800 dark:text-green-300',
+    error: 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700 text-red-800 dark:text-red-300',
+    warning: 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700 text-yellow-800 dark:text-yellow-300',
+    info: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300'
+  };
+
+  const icons = {
+    success: '✅',
+    error: '❌',
+    warning: '⚠️',
+    info: 'ℹ️'
+  };
+
+  return (
+    <div className={`fixed top-4 right-4 z-[100] max-w-sm w-full mx-4 sm:mx-0 ${types[type]} border rounded-lg shadow-lg p-4 animate-slide-in`}>
+      <div className="flex items-start gap-3">
+        <span className="text-2xl">{icons[type]}</span>
+        <p className="flex-1 text-sm font-medium">{message}</p>
+        <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const useToast = () => {
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = (message, type = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
+
+  const ToastContainer = () => (
+    <>
+      {toasts.map(toast => (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          onClose={() => removeToast(toast.id)}
+        />
+      ))}
+    </>
+  );
+
+  return { showToast, ToastContainer };
+};
+
+// Componente: Modal de Confirmación
+const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-3">{title}</h3>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">{message}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+            className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Iconos SVG personalizados
 const CommaIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -622,14 +730,14 @@ const DecimalSeparatorSwitcher = ({ decimalSeparator, setDecimalSeparator }) => 
     <button
       onClick={() => setDecimalSeparator('coma')}
       className={`p-1 rounded text-gray-700 dark:text-gray-300 ${decimalSeparator === 'coma' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
-      title="Separador decimal: coma (1,23)"
+      title="Separador decimal: coma (0,00)"
     >
       <CommaIcon />
     </button>
     <button
       onClick={() => setDecimalSeparator('punto')}
       className={`p-1 rounded text-gray-700 dark:text-gray-300 ${decimalSeparator === 'punto' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
-      title="Separador decimal: punto (1.23)"
+      title="Separador decimal: punto (0.00)"
     >
       <DotIcon />
     </button>
@@ -643,21 +751,21 @@ const ThemeSwitcher = ({ theme, setTheme }) => {
       <button
         onClick={() => setTheme('light')}
         className={`p-2 rounded ${theme === 'light' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
-        title="Modo claro"
+        title="Tema claro"
       >
         <Sun className="w-4 h-4 text-gray-700 dark:text-gray-300" />
       </button>
       <button
         onClick={() => setTheme('dark')}
         className={`p-2 rounded ${theme === 'dark' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
-        title="Modo oscuro"
+        title="Tema oscuro"
       >
         <Moon className="w-4 h-4 text-gray-700 dark:text-gray-300" />
       </button>
       <button
         onClick={() => setTheme('auto')}
         className={`p-2 rounded ${theme === 'auto' ? 'bg-white dark:bg-gray-600 shadow' : ''}`}
-        title="Automático"
+        title="Tema del sistema"
       >
         <Monitor className="w-4 h-4 text-gray-700 dark:text-gray-300" />
       </button>
@@ -771,7 +879,7 @@ const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformit
 };
 
 // Componente: Modal de Importación
-const ImportModal = ({ isOpen, onClose, onImport }) => {
+const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
   const [textInput, setTextInput] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
@@ -781,16 +889,16 @@ const ImportModal = ({ isOpen, onClose, onImport }) => {
 
   const handleTextImport = () => {
     if (!textInput.trim()) {
-      alert('Por favor ingresa algunos pesos');
+      showToast('Por favor ingresa algunos pesos', 'warning');
       return;
     }
     const result = onImport(textInput);
     if (result.success) {
-      alert(`✅ ${result.count} pesos importados exitosamente`);
+      showToast(`${result.count} pesos importados exitosamente`, 'success');
       setTextInput('');
       onClose();
     } else {
-      alert('❌ No se encontraron números válidos en el texto');
+      showToast('No se encontraron números válidos en el texto', 'error');
     }
   };
 
@@ -867,12 +975,12 @@ const ImportModal = ({ isOpen, onClose, onImport }) => {
       if (validNumbers.length > 0) {
         const numbersText = validNumbers.join(' ');
         setTextInput(numbersText);
-        alert(`✅ OCR completado. Se encontraron ${validNumbers.length} números. Revisa y confirma antes de importar.`);
+        showToast(`OCR completado. Se encontraron ${validNumbers.length} números. Revisa y confirma antes de importar`, 'success');
       } else {
-        alert('❌ No se encontraron números válidos en la imagen. Asegúrate de que:\n- La imagen sea clara y legible\n- Los números estén en formato X.XX\n- Intenta con mejor iluminación');
+        showToast('No se encontraron números válidos en la imagen. Asegúrate de que la imagen sea clara y legible', 'error');
       }
     } catch (error) {
-      alert('❌ Error al procesar la imagen: ' + error.message);
+      showToast('Error al procesar la imagen: ' + error.message, 'error');
       console.error(error);
     } finally {
       setIsProcessing(false);
@@ -1046,7 +1154,6 @@ const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNu
           value={numUnidades}
           onChange={(e) => onNumUnidadesChange(e.target.value)}
           onBlur={(e) => {
-            // Si está vacío al perder foco, establecer valor por defecto
             if (e.target.value === '' || e.target.value === '0') {
               onNumUnidadesChange('60');
             }
@@ -1083,7 +1190,7 @@ const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNu
 };
 
 // Componente: Tabla de Pesos
-const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onOptimize, decimalSeparator, analysis, weightManager }) => {
+const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onOptimize, decimalSeparator, analysis, weightManager, showToast, setConfirmDialog }) => {
   const columns = 3;
   const rows = Math.ceil(numUnidades / columns);
 
@@ -1099,7 +1206,6 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
   });
 
   const totalSum = columnSums.reduce((a, b) => a + b, 0);
-
   const hasBackup = weightManager.backupWeights !== null;
 
   return (
@@ -1116,7 +1222,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
               <button
                 onClick={() => {
                   const result = weightManager.restoreBackup();
-                  alert(result.message);
+                  showToast(result.message, result.success ? 'success' : 'warning');
                 }}
                 className="whitespace-nowrap px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-xs font-medium"
               >
@@ -1124,9 +1230,15 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
               </button>
               <button
                 onClick={() => {
-                  if (confirm('¿Descartar el backup? No podrás recuperar los pesos originales.')) {
-                    weightManager.discardBackup();
-                  }
+                  setConfirmDialog({
+                    isOpen: true,
+                    title: '¿Descartar backup?',
+                    message: 'No podrás recuperar los pesos originales después de descartar el backup.',
+                    onConfirm: () => {
+                      weightManager.discardBackup();
+                      showToast('Backup descartado', 'info');
+                    }
+                  });
                 }}
                 className="whitespace-nowrap px-3 py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-xs font-medium"
               >
@@ -1427,13 +1539,22 @@ const PoultryWeightTracker = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
   const [loadedRecordId, setLoadedRecordId] = useState(null);
-  const [decimalSeparator, setDecimalSeparator] = useState('coma');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  
+  const [decimalSeparator, setDecimalSeparator] = useState(() => {
+    return localStorage.getItem('decimalSeparator') || 'coma';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('decimalSeparator', decimalSeparator);
+  }, [decimalSeparator]);
   
   const { theme, setTheme } = useDarkMode();
   const weightManager = useWeights(60);
   const { calculateAnalysis } = useAnalysis(weightManager.getValidWeights);
   const recordManager = useRecords();
+  const { showToast, ToastContainer } = useToast();
 
   const analysis = calculateAnalysis();
 
@@ -1448,17 +1569,17 @@ const PoultryWeightTracker = () => {
       null
     );
     if (result.success) {
-      alert(result.message);
+      showToast(result.message, 'success');
       setLoadedRecordId(null);
       weightManager.clearWeights();
     } else {
-      alert(result.message);
+      showToast(result.message, 'error');
     }
   };
 
   const handleUpdate = () => {
     if (!loadedRecordId) {
-      alert('No hay registro cargado para actualizar');
+      showToast('No hay registro cargado para actualizar', 'warning');
       return;
     }
     const result = recordManager.saveRecord(
@@ -1471,9 +1592,9 @@ const PoultryWeightTracker = () => {
       loadedRecordId
     );
     if (result.success) {
-      alert(result.message);
+      showToast(result.message, 'success');
     } else {
-      alert(result.message);
+      showToast(result.message, 'error');
     }
   };
 
@@ -1484,6 +1605,7 @@ const PoultryWeightTracker = () => {
       analysis,
       weightManager.getValidWeights()
     );
+    showToast('Archivo CSV exportado exitosamente', 'success');
   };
 
   const handleLoadRecord = (record) => {
@@ -1492,24 +1614,36 @@ const PoultryWeightTracker = () => {
     weightManager.loadWeights(record.weights, record.numUnidades);
     setLoadedRecordId(record.id);
     setShowHistory(false);
-    alert('✅ Registro cargado. Puedes editarlo y usar "Actualizar" para guardarlo.');
+    showToast('Registro cargado. Puedes editarlo y usar "Actualizar" para guardarlo', 'success');
   };
 
   const handleDeleteRecord = (id) => {
-    if (window.confirm('¿Estás seguro de eliminar este registro?')) {
-      recordManager.deleteRecord(id);
-      if (loadedRecordId === id) {
-        setLoadedRecordId(null);
-        weightManager.clearWeights();
+    setConfirmDialog({
+      isOpen: true,
+      title: '¿Eliminar registro?',
+      message: '¿Estás seguro de eliminar este registro? Esta acción no se puede deshacer.',
+      onConfirm: () => {
+        recordManager.deleteRecord(id);
+        if (loadedRecordId === id) {
+          setLoadedRecordId(null);
+          weightManager.clearWeights();
+        }
+        showToast('Registro eliminado exitosamente', 'success');
       }
-      alert('✅ Registro eliminado');
-    }
+    });
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 p-2 sm:p-4 transition-colors">
+      <ToastContainer />
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+      />
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="flex flex-col gap-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 mb-2 sm:mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1595,6 +1729,8 @@ const PoultryWeightTracker = () => {
               decimalSeparator={decimalSeparator}
               analysis={analysis}
               weightManager={weightManager}
+              showToast={showToast}
+              setConfirmDialog={setConfirmDialog}
             />
           </div>
 
@@ -1613,6 +1749,7 @@ const PoultryWeightTracker = () => {
           isOpen={showImportModal}
           onClose={() => setShowImportModal(false)}
           onImport={weightManager.importWeightsFromText}
+          showToast={showToast}
         />
 
         <OptimizeUniformityModal
@@ -1621,9 +1758,9 @@ const PoultryWeightTracker = () => {
           onOptimize={(targetMin, targetMax) => {
             const result = weightManager.optimizeUniformity(targetMin, targetMax);
             if (result.success) {
-              alert(`✅ ${result.message}`);
+              showToast(result.message, 'success');
             } else {
-              alert(`ℹ️ ${result.message}`);
+              showToast(result.message, 'info');
             }
           }}
           currentUniformity={analysis?.uniformidad}

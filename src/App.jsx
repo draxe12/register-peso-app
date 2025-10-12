@@ -526,6 +526,11 @@ const useRecords = () => {
     return true;
   };
 
+  const importRecords = (newRecords) => {
+    setRegistros(newRecords);
+    return { success: true, message: `${newRecords.length} registros importados exitosamente` };
+  };
+
   const getRecordsByCorral = (corral) => {
     return registros
       .filter(r => r.corral === corral)
@@ -536,6 +541,7 @@ const useRecords = () => {
     registros,
     saveRecord,
     deleteRecord,
+    importRecords,
     getRecordsByCorral
   };
 };
@@ -545,8 +551,7 @@ const useRecords = () => {
 const exportUtils = {
   exportToCSV: (corral, edad, analysis, validWeights) => {
     if (!analysis) {
-      alert('No hay datos para exportar');
-      return;
+      return { success: false, message: 'No hay datos para exportar' };
     }
 
     let csv = 'Registro de Pesos de Pollos\n\n';
@@ -581,12 +586,12 @@ const exportUtils = {
     link.href = URL.createObjectURL(blob);
     link.download = `registro_pesos_${corral}_${edad}dias_${Date.now()}.csv`;
     link.click();
+    return { success: true, message: 'Archivo CSV exportado exitosamente' };
   },
 
   exportAllToCSV: (registros) => {
     if (registros.length === 0) {
-      alert('No hay registros históricos para exportar');
-      return;
+      return { success: false, message: 'No hay registros históricos para exportar' };
     }
 
     let csv = 'HISTORIAL DE REGISTROS DE PESOS\n\n';
@@ -601,6 +606,51 @@ const exportUtils = {
     link.href = URL.createObjectURL(blob);
     link.download = `historial_completo_${Date.now()}.csv`;
     link.click();
+    return { success: true, message: 'Historial exportado exitosamente' };
+  },
+
+  exportAllToJSON: (registros) => {
+    if (registros.length === 0) {
+      return { success: false, message: 'No hay registros históricos para exportar' };
+    }
+
+    const data = {
+      version: '1.0',
+      exportDate: new Date().toISOString(),
+      totalRecords: registros.length,
+      records: registros
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `backup_completo_${Date.now()}.json`;
+    link.click();
+    return { success: true, message: 'Backup JSON exportado exitosamente' };
+  },
+
+  importFromJSON: (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          
+          if (!data.records || !Array.isArray(data.records)) {
+            reject(new Error('Formato de archivo inválido'));
+            return;
+          }
+
+          resolve(data.records);
+        } catch (error) {
+          reject(new Error('Error al leer el archivo JSON'));
+        }
+      };
+
+      reader.onerror = () => reject(new Error('Error al leer el archivo'));
+      reader.readAsText(file);
+    });
   }
 };
 
@@ -614,10 +664,10 @@ const Toast = ({ message, type = 'info', onClose }) => {
   }, [onClose]);
 
   const types = {
-    success: 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700 text-green-800 dark:text-green-300',
-    error: 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700 text-red-800 dark:text-red-300',
-    warning: 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700 text-yellow-800 dark:text-yellow-300',
-    info: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300'
+    success: 'bg-green-100 dark:bg-green-800 border-green-300 dark:border-green-600 text-green-900 dark:text-green-100',
+    error: 'bg-red-100 dark:bg-red-800 border-red-300 dark:border-red-600 text-red-900 dark:text-red-100',
+    warning: 'bg-yellow-100 dark:bg-yellow-800 border-yellow-300 dark:border-yellow-600 text-yellow-900 dark:text-yellow-100',
+    info: 'bg-blue-100 dark:bg-blue-800 border-blue-300 dark:border-blue-600 text-blue-900 dark:text-blue-100'
   };
 
   const icons = {
@@ -628,11 +678,11 @@ const Toast = ({ message, type = 'info', onClose }) => {
   };
 
   return (
-    <div className={`fixed top-4 right-4 z-[100] max-w-sm w-full mx-4 sm:mx-0 ${types[type]} border rounded-lg shadow-lg p-4 animate-slide-in`}>
+    <div className={`fixed top-4 right-4 z-[100] max-w-sm w-full mx-4 sm:mx-0 ${types[type]} border-2 rounded-lg shadow-xl p-4 animate-slide-in`}>
       <div className="flex items-start gap-3">
         <span className="text-2xl">{icons[type]}</span>
         <p className="flex-1 text-sm font-medium">{message}</p>
-        <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+        <button onClick={onClose} className="opacity-70 hover:opacity-100 transition-opacity">
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -1208,6 +1258,49 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
   const totalSum = columnSums.reduce((a, b) => a + b, 0);
   const hasBackup = weightManager.backupWeights !== null;
 
+  // Funciones auxiliares movidas fuera del componente para mejor rendimiento
+  const esDecimalParConDosDigitos = (numero) => {
+    const numeroComoCadena = numero.toFixed(2);
+    const puntoDecimalIndex = numeroComoCadena.indexOf('.');
+    if (puntoDecimalIndex === -1) return false;
+    const parteDecimalComoCadena = numeroComoCadena.substring(puntoDecimalIndex + 1);
+    const parteDecimalComoNumero = parseInt(parteDecimalComoCadena, 10);
+    return parteDecimalComoNumero % 2 === 0;
+  };
+
+  const modificarValor = (idx, direccion) => {
+    const currentValue = parseFloat(weights[idx]) || 0;
+    const xtra = esDecimalParConDosDigitos(currentValue) ? 0 : 0.01;
+    const valorStep = 0.02;
+    const newValue = direccion === 'arriba' 
+      ? (currentValue + valorStep - xtra).toFixed(2) 
+      : Math.max(0, currentValue - valorStep + xtra).toFixed(2);
+    onWeightChange(idx, newValue);
+  };
+
+  const ingresarValor = (idx, value) => {
+    let valueToProcess = String(value);
+    valueToProcess = valueToProcess.replace(',', '.');
+    onWeightChange(idx, valueToProcess);
+  };
+
+  const handleRestoreBackup = () => {
+    const result = weightManager.restoreBackup();
+    showToast(result.message, result.success ? 'success' : 'warning');
+  };
+
+  const handleDiscardBackup = () => {
+    setConfirmDialog({
+      isOpen: true,
+      title: '¿Descartar backup?',
+      message: 'No podrás recuperar los pesos originales después de descartar el backup.',
+      onConfirm: () => {
+        weightManager.discardBackup();
+        showToast('Backup descartado', 'info');
+      }
+    });
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
       {hasBackup && (
@@ -1220,26 +1313,13 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  const result = weightManager.restoreBackup();
-                  showToast(result.message, result.success ? 'success' : 'warning');
-                }}
+                onClick={handleRestoreBackup}
                 className="whitespace-nowrap px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-xs font-medium"
               >
                 ↺ Restaurar
               </button>
               <button
-                onClick={() => {
-                  setConfirmDialog({
-                    isOpen: true,
-                    title: '¿Descartar backup?',
-                    message: 'No podrás recuperar los pesos originales después de descartar el backup.',
-                    onConfirm: () => {
-                      weightManager.discardBackup();
-                      showToast('Backup descartado', 'info');
-                    }
-                  });
-                }}
+                onClick={handleDiscardBackup}
                 className="whitespace-nowrap px-3 py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-xs font-medium"
               >
                 ✕ Descartar
@@ -1303,32 +1383,6 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
                     return <td key={colIdx} className="border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-900"></td>;
                   }
 
-                  function esDecimalParConDosDigitos(numero) {
-                    const numeroComoCadena = numero.toFixed(2);
-                    const puntoDecimalIndex = numeroComoCadena.indexOf('.');
-                    if (puntoDecimalIndex === -1) {
-                      return false;
-                    }
-                    const parteDecimalComoCadena = numeroComoCadena.substring(puntoDecimalIndex + 1);
-                    const parteDecimalComoNumero = parseInt(parteDecimalComoCadena, 10);
-                    return parteDecimalComoNumero % 2 === 0;
-                  }
-
-                  let valorStep = 0.02;
-                  
-                  function modificarValor(direccion) {
-                    const currentValue = parseFloat(weights[idx]) || 0;
-                    const xtra = esDecimalParConDosDigitos(currentValue) ? 0 : 0.01;
-                    const newValue = direccion === 'arriba' ? (currentValue + valorStep - xtra).toFixed(2) : Math.max(0, currentValue - valorStep + xtra).toFixed(2);
-                    onWeightChange(idx, newValue);
-                  }
-
-                  function ingresarValor(value) {
-                    let valueToProcess = String(value);
-                    valueToProcess = valueToProcess.replace(',', '.');
-                    onWeightChange(idx, valueToProcess);
-                  }
-
                   return (
                     <td
                       key={colIdx}
@@ -1338,14 +1392,14 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
                         type="text"
                         inputMode="decimal"
                         value={formatNumberForDisplay(weights[idx], decimalSeparator === 'coma' ? ',' : '.')}
-                        onChange={(e) => ingresarValor(e.target.value)}
+                        onChange={(e) => ingresarValor(idx, e.target.value)}
                         className="w-full px-2 py-2 pr-8 text-center border-none focus:ring-2 focus:ring-blue-400 focus:outline-none bg-transparent text-gray-900 dark:text-gray-100 text-sm sm:text-base"
                         placeholder={`${formatNumber(0, 2, decimalSeparator)}`}
                       />
 
                       <div className="hidden group-hover:flex flex-col absolute right-2 top-1/2 -translate-y-1/2">
                         <button
-                          onClick={() => modificarValor('arriba')}
+                          onClick={() => modificarValor(idx, 'arriba')}
                           tabIndex={-1}
                           className="rounded-t text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
                           title="Incrementar peso"
@@ -1353,7 +1407,7 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
                           <ChevronUpIcon />
                         </button>
                         <button
-                          onClick={() => modificarValor('abajo')}
+                          onClick={() => modificarValor(idx, 'abajo')}
                           tabIndex={-1}
                           className="rounded-b text-gray-700 dark:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 shadow-sm transition-colors"
                           title="Decrementar peso"
@@ -1454,7 +1508,9 @@ const StatItem = ({ label, value, valueClass = "text-gray-800 dark:text-gray-100
   </div>
 );
 
-const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, decimalSeparator }) => {
+const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImportAll, decimalSeparator }) => {
+  const fileInputRef = useRef(null);
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 mb-2 sm:mb-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -1462,13 +1518,29 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, decimalS
           <History className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Historial de Registros</h2>
         </div>
-        <button
-          onClick={onExportAll}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
-        >
-          <Download className="w-4 h-4" />
-          Exportar Todo
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={onImportAll}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm font-medium"
+          >
+            <Upload className="w-4 h-4" />
+            Importar
+          </button>
+          <button
+            onClick={onExportAll}
+            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
+          >
+            <Download className="w-4 h-4" />
+            Exportar
+          </button>
+        </div>
       </div>
       
       {registros.length === 0 ? (
@@ -1599,13 +1671,39 @@ const PoultryWeightTracker = () => {
   };
 
   const handleExport = () => {
-    exportUtils.exportToCSV(
+    const result = exportUtils.exportToCSV(
       corral,
       edad,
       analysis,
       weightManager.getValidWeights()
     );
-    showToast('Archivo CSV exportado exitosamente', 'success');
+    if (result.success) {
+      showToast(result.message, 'success');
+    }
+  };
+
+  const handleExportAll = () => {
+    const result = exportUtils.exportAllToJSON(recordManager.registros);
+    if (result.success) {
+      showToast(result.message, 'success');
+    } else {
+      showToast(result.message, 'error');
+    }
+  };
+
+  const handleImportAll = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const importedRecords = await exportUtils.importFromJSON(file);
+      const result = recordManager.importRecords(importedRecords);
+      showToast(result.message, 'success');
+      e.target.value = '';
+    } catch (error) {
+      showToast(error.message, 'error');
+      e.target.value = '';
+    }
   };
 
   const handleLoadRecord = (record) => {
@@ -1712,7 +1810,8 @@ const PoultryWeightTracker = () => {
             registros={recordManager.registros}
             onDelete={handleDeleteRecord}
             onLoad={handleLoadRecord}
-            onExportAll={() => exportUtils.exportAllToCSV(recordManager.registros)}
+            onExportAll={handleExportAll}
+            onImportAll={handleImportAll}
             decimalSeparator={decimalSeparator}
           />
         )}

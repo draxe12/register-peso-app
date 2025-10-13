@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles } from 'lucide-react';
 
 // Agregar estilos de animación
@@ -474,7 +474,7 @@ const useAnalysis = (getValidWeights) => {
   return { calculateAnalysis };
 };
 
-// Hook para gestión de registros con localStorage
+// Hook para gestión de registros
 const useRecords = () => {
   const [registros, setRegistros] = useState(() => {
     const saved = localStorage.getItem('poultryRecords');
@@ -631,25 +631,53 @@ const exportUtils = {
 
   importFromJSON: (file) => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
+      if (!file) {
+        reject(new Error('Sin archivo'));
+        return;
+      }
+
+      // Crear URL del blob - más estable en móviles
+      const url = URL.createObjectURL(file);
       
-      reader.onload = (e) => {
-        try {
-          const data = JSON.parse(e.target.result);
+      fetch(url)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Error al leer archivo');
+          }
+          return response.text();
+        })
+        .then(text => {
+          URL.revokeObjectURL(url); // Limpiar memoria
           
-          if (!data.records || !Array.isArray(data.records)) {
-            reject(new Error('Formato de archivo inválido'));
+          if (!text || text.trim() === '') {
+            reject(new Error('Archivo vacío'));
             return;
           }
 
-          resolve(data.records);
-        } catch (error) {
-          reject(new Error('Error al leer el archivo JSON'));
-        }
-      };
+          const data = JSON.parse(text);
+          
+          if (!data?.records?.length) {
+            reject(new Error('Sin registros'));
+            return;
+          }
 
-      reader.onerror = () => reject(new Error('Error al leer el archivo'));
-      reader.readAsText(file);
+          const valid = data.records.filter(r => r?.id && r?.corral);
+
+          if (!valid.length) {
+            reject(new Error('Sin registros válidos'));
+            return;
+          }
+
+          resolve(valid);
+        })
+        .catch(error => {
+          URL.revokeObjectURL(url);
+          if (error instanceof SyntaxError) {
+            reject(new Error('JSON inválido'));
+          } else {
+            reject(new Error(error.message || 'Error al importar'));
+          }
+        });
     });
   }
 };
@@ -658,9 +686,15 @@ const exportUtils = {
 
 // Sistema de Notificaciones
 const Toast = ({ message, type = 'info', onClose }) => {
+  const timerRef = useRef(null);
+
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
-    return () => clearTimeout(timer);
+    timerRef.current = setTimeout(onClose, 3000);
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
   }, [onClose]);
 
   const types = {
@@ -678,7 +712,7 @@ const Toast = ({ message, type = 'info', onClose }) => {
   };
 
   return (
-    <div className={`fixed top-4 right-4 z-[100] max-w-sm w-full mx-4 sm:mx-0 ${types[type]} border-2 rounded-lg shadow-xl p-4 animate-slide-in`}>
+    <div className={`fixed top-0 right-0 z-[100] max-w-full m-2 sm:m-4 ${types[type]} border-2 rounded-lg shadow-xl p-4 animate-slide-in`}>
       <div className="flex items-start gap-3">
         <span className="text-2xl">{icons[type]}</span>
         <p className="flex-1 text-sm font-medium">{message}</p>
@@ -692,17 +726,53 @@ const Toast = ({ message, type = 'info', onClose }) => {
 
 const useToast = () => {
   const [toasts, setToasts] = useState([]);
+  const timeoutsRef = useRef({});
 
-  const showToast = (message, type = 'info') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-  };
+  const showToast = useCallback((message, type = 'info') => {
+    const id = Date.now() + Math.random();
+    
+    // Limpiar cualquier timeout anterior del mismo mensaje
+    Object.keys(timeoutsRef.current).forEach(key => {
+      const toast = JSON.parse(key);
+      if (toast.message === message && toast.type === type) {
+        clearTimeout(timeoutsRef.current[key]);
+        delete timeoutsRef.current[key];
+      }
+    });
+    
+    // Eliminar toasts con el mismo mensaje inmediatamente
+    setToasts(prev => prev.filter(t => !(t.message === message && t.type === type)));
+    
+    // Agregar el nuevo toast después de un pequeño delay
+    setTimeout(() => {
+      setToasts(prev => [...prev, { id, message, type }]);
+      
+      // Configurar timeout para auto-remover
+      const key = JSON.stringify({ message, type });
+      timeoutsRef.current[key] = setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+        delete timeoutsRef.current[key];
+      }, 3000);
+    }, 50);
+  }, []);
 
-  const removeToast = (id) => {
+  const removeToast = useCallback((id) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
-  };
+    // Limpiar timeout asociado
+    Object.keys(timeoutsRef.current).forEach(key => {
+      clearTimeout(timeoutsRef.current[key]);
+      delete timeoutsRef.current[key];
+    });
+  }, []);
 
-  const ToastContainer = () => (
+  useEffect(() => {
+    return () => {
+      Object.values(timeoutsRef.current).forEach(clearTimeout);
+      timeoutsRef.current = {};
+    };
+  }, []);
+
+  const ToastContainer = useCallback(() => (
     <>
       {toasts.map(toast => (
         <Toast
@@ -713,7 +783,7 @@ const useToast = () => {
         />
       ))}
     </>
-  );
+  ), [toasts, removeToast]);
 
   return { showToast, ToastContainer };
 };
@@ -775,7 +845,7 @@ const ChevronDownIcon = () => (
 );
 
 // Componente: Decimal Separator Switcher
-const DecimalSeparatorSwitcher = ({ decimalSeparator, setDecimalSeparator }) => (
+const DecimalSeparatorSwitcher = React.memo(({ decimalSeparator, setDecimalSeparator }) => (
   <div className="flex gap-2 justify-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
     <button
       onClick={() => setDecimalSeparator('coma')}
@@ -792,10 +862,10 @@ const DecimalSeparatorSwitcher = ({ decimalSeparator, setDecimalSeparator }) => 
       <DotIcon />
     </button>
   </div>
-);
+));
 
 // Componente: Theme Switcher
-const ThemeSwitcher = ({ theme, setTheme }) => {
+const ThemeSwitcher = React.memo(({ theme, setTheme }) => {
   return (
     <div className="flex gap-2 justify-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
       <button
@@ -821,7 +891,7 @@ const ThemeSwitcher = ({ theme, setTheme }) => {
       </button>
     </div>
   );
-};
+});
 
 // Componente: Modal de Optimización de Uniformidad
 const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformity }) => {
@@ -1165,7 +1235,7 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
 };
 
 // Componente: Formulario de Entrada
-const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNumUnidadesChange, onSave, onUpdate, onExport, canSave, isLoadedFromHistory }) => {
+const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUnidades, onNumUnidadesChange, onSave, onUpdate, onExport, canSave, isLoadedFromHistory }) => {
   const corrales = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B', '7A', '7B', '8A', '8B', '9A', '9B'];
   const edades = [7, 14, 21, 28, 35, 42];
 
@@ -1237,7 +1307,7 @@ const FormularioEntrada = ({ corral, setCorral, edad, setEdad, numUnidades, onNu
       </div>
     </div>
   );
-};
+});
 
 // Componente: Tabla de Pesos
 const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onOptimize, decimalSeparator, analysis, weightManager, showToast, setConfirmDialog }) => {
@@ -1258,7 +1328,6 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
   const totalSum = columnSums.reduce((a, b) => a + b, 0);
   const hasBackup = weightManager.backupWeights !== null;
 
-  // Funciones auxiliares movidas fuera del componente para mejor rendimiento
   const esDecimalParConDosDigitos = (numero) => {
     const numeroComoCadena = numero.toFixed(2);
     const puntoDecimalIndex = numeroComoCadena.indexOf('.');
@@ -1508,8 +1577,23 @@ const StatItem = ({ label, value, valueClass = "text-gray-800 dark:text-gray-100
   </div>
 );
 
-const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImportAll, decimalSeparator }) => {
+const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImportAll, onImportFromText, decimalSeparator }) => {
   const fileInputRef = useRef(null);
+  const [showTextImport, setShowTextImport] = useState(false);
+  const [jsonText, setJsonText] = useState('');
+
+  const handleTextImport = () => {
+    if (!jsonText.trim()) {
+      return;
+    }
+    onImportFromText(jsonText);
+    setJsonText('');
+    setShowTextImport(false);
+  };
+
+  const handleFileSelect = () => {
+    fileInputRef.current?.click();
+  };
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6 mb-2 sm:mb-6">
@@ -1522,16 +1606,23 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json"
+            accept=".json,application/json"
             onChange={onImportAll}
-            className="hidden"
+            style={{ display: 'none' }}
           />
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm font-medium"
+            onClick={handleFileSelect}
+            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm font-medium"
           >
             <Upload className="w-4 h-4" />
-            Importar
+            Archivo
+          </button>
+          <button
+            onClick={() => setShowTextImport(!showTextImport)}
+            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            {showTextImport ? 'Cerrar' : 'Texto'}
           </button>
           <button
             onClick={onExportAll}
@@ -1542,6 +1633,44 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
           </button>
         </div>
       </div>
+      
+      {showTextImport && (
+        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">
+            📋 Importar desde texto
+          </h3>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+            1. Abre el archivo backup.json con un editor de texto<br/>
+            2. Copia todo el contenido (Ctrl+A, Ctrl+C)<br/>
+            3. Pega aquí abajo (Ctrl+V)<br/>
+            4. Haz clic en "Importar Datos"
+          </p>
+          <textarea
+            value={jsonText}
+            onChange={(e) => setJsonText(e.target.value)}
+            placeholder='Pega aquí el contenido del archivo JSON...'
+            className="w-full h-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 resize-none"
+          />
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={handleTextImport}
+              disabled={!jsonText.trim()}
+              className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium"
+            >
+              Importar Datos
+            </button>
+            <button
+              onClick={() => {
+                setJsonText('');
+                setShowTextImport(false);
+              }}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
       
       {registros.length === 0 ? (
         <p className="text-center py-8 text-gray-400 dark:text-gray-500">No hay registros guardados</p>
@@ -1602,8 +1731,6 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
   );
 };
 
-// ==================== COMPONENTE PRINCIPAL ====================
-
 const PoultryWeightTracker = () => {
   const [corral, setCorral] = useState('1A');
   const [edad, setEdad] = useState('7');
@@ -1630,7 +1757,19 @@ const PoultryWeightTracker = () => {
 
   const analysis = calculateAnalysis();
 
-  const handleSave = () => {
+  useEffect(() => {
+    return () => {
+      setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+    };
+  }, []);
+
+  // Memoizar setters para evitar re-renders
+  const memoizedSetCorral = useCallback((value) => setCorral(value), []);
+  const memoizedSetEdad = useCallback((value) => setEdad(value), []);
+  const memoizedSetDecimalSeparator = useCallback((value) => setDecimalSeparator(value), []);
+  const memoizedSetTheme = useCallback((value) => setTheme(value), [setTheme]);
+
+  const handleSave = useCallback(() => {
     const result = recordManager.saveRecord(
       corral,
       edad,
@@ -1647,9 +1786,9 @@ const PoultryWeightTracker = () => {
     } else {
       showToast(result.message, 'error');
     }
-  };
+  }, [corral, edad, weightManager, analysis, recordManager, showToast]);
 
-  const handleUpdate = () => {
+  const handleUpdate = useCallback(() => {
     if (!loadedRecordId) {
       showToast('No hay registro cargado para actualizar', 'warning');
       return;
@@ -1668,9 +1807,9 @@ const PoultryWeightTracker = () => {
     } else {
       showToast(result.message, 'error');
     }
-  };
+  }, [corral, edad, loadedRecordId, weightManager, analysis, recordManager, showToast]);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     const result = exportUtils.exportToCSV(
       corral,
       edad,
@@ -1680,42 +1819,73 @@ const PoultryWeightTracker = () => {
     if (result.success) {
       showToast(result.message, 'success');
     }
-  };
+  }, [corral, edad, analysis, weightManager, showToast]);
 
-  const handleExportAll = () => {
+  const handleImportFromText = useCallback((jsonText) => {
+    try {
+      const data = JSON.parse(jsonText);
+      
+      if (!data?.records?.length) {
+        showToast('El texto no contiene registros válidos', 'error');
+        return;
+      }
+
+      const valid = data.records.filter(r => r?.id && r?.corral);
+
+      if (!valid.length) {
+        showToast('No se encontraron registros válidos', 'error');
+        return;
+      }
+
+      const result = recordManager.importRecords(valid);
+      showToast(result.message, 'success');
+    } catch (error) {
+      showToast('El texto no es un JSON válido', 'error');
+    }
+  }, [recordManager, showToast]);
+
+  const handleExportAll = useCallback(() => {
     const result = exportUtils.exportAllToJSON(recordManager.registros);
     if (result.success) {
       showToast(result.message, 'success');
     } else {
       showToast(result.message, 'error');
     }
-  };
+  }, [recordManager.registros, showToast]);
 
-  const handleImportAll = async (e) => {
+  const handleImportAll = useCallback(async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    const input = e.target;
+    
+    if (!file) {
+      input.value = '';
+      return;
+    }
+
+    input.disabled = true;
 
     try {
-      const importedRecords = await exportUtils.importFromJSON(file);
-      const result = recordManager.importRecords(importedRecords);
+      const records = await exportUtils.importFromJSON(file);
+      const result = recordManager.importRecords(records);
       showToast(result.message, 'success');
-      e.target.value = '';
     } catch (error) {
       showToast(error.message, 'error');
-      e.target.value = '';
+    } finally {
+      input.value = '';
+      input.disabled = false;
     }
-  };
+  }, [recordManager, showToast]);
 
-  const handleLoadRecord = (record) => {
+  const handleLoadRecord = useCallback((record) => {
     setCorral(record.corral);
     setEdad(record.edad.toString());
     weightManager.loadWeights(record.weights, record.numUnidades);
     setLoadedRecordId(record.id);
     setShowHistory(false);
     showToast('Registro cargado. Puedes editarlo y usar "Actualizar" para guardarlo', 'success');
-  };
+  }, [weightManager, showToast]);
 
-  const handleDeleteRecord = (id) => {
+  const handleDeleteRecord = useCallback((id) => {
     setConfirmDialog({
       isOpen: true,
       title: '¿Eliminar registro?',
@@ -1729,7 +1899,7 @@ const PoultryWeightTracker = () => {
         showToast('Registro eliminado exitosamente', 'success');
       }
     });
-  };
+  }, [recordManager, loadedRecordId, weightManager, showToast]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 p-2 sm:p-4 transition-colors">
@@ -1774,8 +1944,8 @@ const PoultryWeightTracker = () => {
                   ${isMenuOpen ? 'block' : 'hidden'}
                 `}
               >
-                <ThemeSwitcher theme={theme} setTheme={setTheme} />
-                <DecimalSeparatorSwitcher decimalSeparator={decimalSeparator} setDecimalSeparator={setDecimalSeparator} />
+                <ThemeSwitcher theme={theme} setTheme={memoizedSetTheme} />
+                <DecimalSeparatorSwitcher decimalSeparator={decimalSeparator} setDecimalSeparator={memoizedSetDecimalSeparator} />
                 <button
                   onClick={() => {
                     setShowHistory(!showHistory);
@@ -1792,9 +1962,9 @@ const PoultryWeightTracker = () => {
 
           <FormularioEntrada
             corral={corral}
-            setCorral={setCorral}
+            setCorral={memoizedSetCorral}
             edad={edad}
-            setEdad={setEdad}
+            setEdad={memoizedSetEdad}
             numUnidades={weightManager.numUnidades}
             onNumUnidadesChange={weightManager.updateSize}
             onSave={handleSave}
@@ -1812,6 +1982,7 @@ const PoultryWeightTracker = () => {
             onLoad={handleLoadRecord}
             onExportAll={handleExportAll}
             onImportAll={handleImportAll}
+            onImportFromText={handleImportFromText}
             decimalSeparator={decimalSeparator}
           />
         )}

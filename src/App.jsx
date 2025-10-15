@@ -37,6 +37,27 @@ const formatNumberForDisplay = (value, separator) => {
 
 // ==================== HOOKS PERSONALIZADOS ====================
 
+// Hook para ClickOutside
+const useClickOutside = (refs, handler) => {
+  useEffect(() => {
+    const listener = (event) => {
+      // Verificamos si el clic ocurrió dentro de alguna de las referencias
+      const isClickInside = refs.some(ref => ref.current && ref.current.contains(event.target));
+      
+      if (isClickInside) {
+        return;
+      }
+      handler(event);
+    };
+
+    document.addEventListener('click', listener);
+
+    return () => {
+      document.removeEventListener('click', listener);
+    };
+  }, [refs, handler]);
+};
+
 // Hook para Dark Mode
 const useDarkMode = () => {
   const [theme, setTheme] = useState(() => {
@@ -626,7 +647,235 @@ const exportUtils = {
     link.href = URL.createObjectURL(blob);
     link.download = `backup_completo_${Date.now()}.json`;
     link.click();
+    URL.revokeObjectURL(link.href);
     return { success: true, message: 'Backup JSON exportado exitosamente' };
+  },
+
+  exportAllToCSVBackup: (registros) => {
+    if (registros.length === 0) {
+      return { success: false, message: 'No hay registros para exportar' };
+    }
+
+    let csv = 'ID,Fecha,Corral,Edad,NumUnidades,TotalAves,Promedio,Mediana,Uniformidad,CV,PesoMin,PesoMax,Rango,Desviacion,Rango10,Min10,Max10,AvesDentro,AvesDebajo,AvesEncima,Pesos\n';
+    
+    registros.forEach(r => {
+      const weights = r.weights.filter(w => w !== '').join(';');
+      csv += `${r.id},"${r.fecha}",${r.corral},${r.edad},${r.numUnidades},${r.analysis.totalAves},`;
+      csv += `${r.analysis.promedio.toFixed(3)},${r.analysis.mediana.toFixed(3)},${r.analysis.uniformidad.toFixed(1)},`;
+      csv += `${r.analysis.cv.toFixed(1)},${r.analysis.pesoMinimo.toFixed(3)},${r.analysis.pesoMaximo.toFixed(3)},`;
+      csv += `${r.analysis.rango.toFixed(3)},${r.analysis.desviacion.toFixed(3)},${r.analysis.rango10.toFixed(3)},`;
+      csv += `${r.analysis.min10.toFixed(3)},${r.analysis.max10.toFixed(3)},${r.analysis.avesDentroRango},`;
+      csv += `${r.analysis.avesDebajoRango},${r.analysis.avesEncimaRango},"${weights}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `backup_registros_${Date.now()}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    return { success: true, message: 'Backup CSV exportado exitosamente' };
+  },
+
+  exportToExcel: (corral, edad, analysis, validWeights) => {
+    if (!analysis) {
+      return { success: false, message: 'No hay datos para exportar' };
+    }
+
+    // Crear HTML que Excel puede importar
+    let html = `
+      <html xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head>
+        <meta charset="UTF-8">
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>Registro de Pesos</x:Name>
+                <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+      </head>
+      <body>
+        <table border="1">
+          <tr><td colspan="3" style="background-color: #4CAF50; color: white; font-weight: bold; font-size: 16px;">REGISTRO DE PESOS DE POLLOS</td></tr>
+          <tr><td><b>Corral:</b></td><td colspan="2">${corral}</td></tr>
+          <tr><td><b>Edad:</b></td><td colspan="2">${edad} días</td></tr>
+          <tr><td><b>Fecha:</b></td><td colspan="2">${new Date().toLocaleString('es-PE')}</td></tr>
+          <tr><td><b>Total Unidades:</b></td><td colspan="2">${analysis.totalAves}</td></tr>
+          <tr><td colspan="3"></td></tr>
+          
+          <tr style="background-color: #2196F3; color: white; font-weight: bold;">
+            <td colspan="3">ANÁLISIS ESTADÍSTICO</td>
+          </tr>
+          <tr><td>Peso Mínimo (kg)</td><td>${analysis.pesoMinimo.toFixed(3)}</td><td></td></tr>
+          <tr><td>Peso Máximo (kg)</td><td>${analysis.pesoMaximo.toFixed(3)}</td><td></td></tr>
+          <tr><td>Rango (kg)</td><td>${analysis.rango.toFixed(3)}</td><td></td></tr>
+          <tr style="background-color: #E8F5E9;"><td><b>Promedio (kg)</b></td><td><b>${analysis.promedio.toFixed(3)}</b></td><td></td></tr>
+          <tr><td>Mediana (kg)</td><td>${analysis.mediana.toFixed(3)}</td><td></td></tr>
+          <tr><td>Desviación Estándar</td><td>${analysis.desviacion.toFixed(3)}</td><td></td></tr>
+          <tr><td>Coef. Variación (%)</td><td>${analysis.cv.toFixed(1)}</td><td></td></tr>
+          <tr><td colspan="3"></td></tr>
+          
+          <tr style="background-color: #FF9800; color: white; font-weight: bold;">
+            <td colspan="3">UNIFORMIDAD ±10%</td>
+          </tr>
+          <tr><td>Rango ±10% (kg)</td><td>${analysis.rango10.toFixed(3)}</td><td></td></tr>
+          <tr><td>Mínimo -10% (kg)</td><td>${analysis.min10.toFixed(3)}</td><td></td></tr>
+          <tr><td>Máximo +10% (kg)</td><td>${analysis.max10.toFixed(3)}</td><td></td></tr>
+          <tr><td>Aves dentro del rango</td><td>${analysis.avesDentroRango}</td><td>${((analysis.avesDentroRango/analysis.totalAves)*100).toFixed(1)}%</td></tr>
+          <tr style="background-color: ${analysis.uniformidad >= 75 ? '#C8E6C9' : analysis.uniformidad >= 50 ? '#FFE0B2' : '#FFCDD2'};">
+            <td><b>Uniformidad (%)</b></td><td><b>${analysis.uniformidad.toFixed(1)}</b></td><td></td>
+          </tr>
+          <tr><td>Aves debajo del rango</td><td>${analysis.avesDebajoRango}</td><td>${((analysis.avesDebajoRango/analysis.totalAves)*100).toFixed(1)}%</td></tr>
+          <tr><td>Aves encima del rango</td><td>${analysis.avesEncimaRango}</td><td>${((analysis.avesEncimaRango/analysis.totalAves)*100).toFixed(1)}%</td></tr>
+          <tr><td colspan="3"></td></tr>
+          
+          <tr style="background-color: #9C27B0; color: white; font-weight: bold;">
+            <td>N°</td><td>Peso (kg)</td><td>Estado</td>
+          </tr>`;
+    
+    validWeights.forEach((w, i) => {
+      const estado = w >= analysis.min10 && w <= analysis.max10 ? 'Dentro rango' : 
+                     w < analysis.min10 ? 'Debajo' : 'Encima';
+      const color = w >= analysis.min10 && w <= analysis.max10 ? '#E8F5E9' : 
+                    w < analysis.min10 ? '#FFEBEE' : '#E3F2FD';
+      html += `<tr style="background-color: ${color};"><td>${i + 1}</td><td>${w.toFixed(3)}</td><td>${estado}</td></tr>`;
+    });
+    
+    html += `</table></body></html>`;
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `registro_pesos_${corral}_${edad}dias_${Date.now()}.xls`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    return { success: true, message: 'Archivo Excel exportado exitosamente' };
+  },
+
+  exportToPDF: (corral, edad, analysis, validWeights) => {
+    if (!analysis) {
+      return { success: false, message: 'No hay datos para exportar' };
+    }
+
+    // Crear HTML optimizado para imprimir como PDF
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          @page { size: A4; margin: 15mm; }
+          body { font-family: Arial, sans-serif; font-size: 11pt; }
+          .header { text-align: center; background: #4CAF50; color: white; padding: 15px; margin-bottom: 20px; }
+          .info-box { background: #f5f5f5; padding: 10px; margin-bottom: 15px; border-left: 4px solid #2196F3; }
+          .section-title { background: #2196F3; color: white; padding: 8px; margin-top: 15px; font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #9C27B0; color: white; }
+          .highlight { background-color: #E8F5E9; font-weight: bold; }
+          .warning { background-color: #FFEBEE; }
+          .good { background-color: #E8F5E9; }
+          .footer { margin-top: 30px; text-align: center; font-size: 9pt; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>REGISTRO DE PESOS DE POLLOS</h1>
+          <p>Sistema de Control de Peso y Uniformidad</p>
+        </div>
+        
+        <div class="info-box">
+          <table style="border: none;">
+            <tr style="border: none;">
+              <td style="border: none;"><b>Corral:</b> ${corral}</td>
+              <td style="border: none;"><b>Edad:</b> ${edad} días</td>
+            </tr>
+            <tr style="border: none;">
+              <td style="border: none;"><b>Fecha:</b> ${new Date().toLocaleString('es-PE')}</td>
+              <td style="border: none;"><b>Total Aves:</b> ${analysis.totalAves}</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="section-title">ANÁLISIS ESTADÍSTICO</div>
+        <table>
+          <tr><td>Peso Mínimo (kg)</td><td>${analysis.pesoMinimo.toFixed(3)}</td></tr>
+          <tr><td>Peso Máximo (kg)</td><td>${analysis.pesoMaximo.toFixed(3)}</td></tr>
+          <tr><td>Rango (kg)</td><td>${analysis.rango.toFixed(3)}</td></tr>
+          <tr class="highlight"><td><b>Promedio (kg)</b></td><td><b>${analysis.promedio.toFixed(3)}</b></td></tr>
+          <tr><td>Mediana (kg)</td><td>${analysis.mediana.toFixed(3)}</td></tr>
+          <tr><td>Desviación Estándar</td><td>${analysis.desviacion.toFixed(3)}</td></tr>
+          <tr><td>Coef. Variación (%)</td><td>${analysis.cv.toFixed(1)}</td></tr>
+        </table>
+
+        <div class="section-title">UNIFORMIDAD ±10%</div>
+        <table>
+          <tr><td>Rango ±10% (kg)</td><td>${analysis.rango10.toFixed(3)}</td></tr>
+          <tr><td>Mínimo -10% (kg)</td><td>${analysis.min10.toFixed(3)}</td></tr>
+          <tr><td>Máximo +10% (kg)</td><td>${analysis.max10.toFixed(3)}</td></tr>
+          <tr><td>Aves dentro del rango</td><td>${analysis.avesDentroRango} (${((analysis.avesDentroRango/analysis.totalAves)*100).toFixed(1)}%)</td></tr>
+          <tr class="${analysis.uniformidad >= 75 ? 'good' : 'warning'}">
+            <td><b>Uniformidad (%)</b></td><td><b>${analysis.uniformidad.toFixed(1)}%</b></td>
+          </tr>
+          <tr><td>Aves debajo del rango</td><td>${analysis.avesDebajoRango} (${((analysis.avesDebajoRango/analysis.totalAves)*100).toFixed(1)}%)</td></tr>
+          <tr><td>Aves encima del rango</td><td>${analysis.avesEncimaRango} (${((analysis.avesEncimaRango/analysis.totalAves)*100).toFixed(1)}%)</td></tr>
+        </table>
+
+        <div class="section-title">TABLA DE PESOS REGISTRADOS</div>
+        <table>
+          <thead>
+            <tr>
+              <th>N°</th><th>Peso (kg)</th><th>Estado</th>
+              <th>N°</th><th>Peso (kg)</th><th>Estado</th>
+              <th>N°</th><th>Peso (kg)</th><th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>`;
+    
+    // Dividir en 3 columnas
+    for (let i = 0; i < validWeights.length; i += 3) {
+      html += '<tr>';
+      for (let j = 0; j < 3; j++) {
+        const idx = i + j;
+        if (idx < validWeights.length) {
+          const w = validWeights[idx];
+          const estado = w >= analysis.min10 && w <= analysis.max10 ? '✓' : 
+                        w < analysis.min10 ? '↓' : '↑';
+          const className = w >= analysis.min10 && w <= analysis.max10 ? 'good' : 'warning';
+          html += `<td>${idx + 1}</td><td>${w.toFixed(3)}</td><td class="${className}">${estado}</td>`;
+        } else {
+          html += '<td></td><td></td><td></td>';
+        }
+      }
+      html += '</tr>';
+    }
+    
+    html += `
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          <p>Generado el ${new Date().toLocaleString('es-PE')}</p>
+          <p>Sistema de Registro de Pesos de Pollos v1.0</p>
+        </div>
+      </body>
+      </html>`;
+
+    // Abrir en nueva ventana para imprimir
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(html);
+    printWindow.document.close();
+    
+    // Esperar a que cargue y abrir diálogo de impresión
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+    
+    return { success: true, message: 'PDF listo para imprimir (Ctrl+P o Guardar como PDF)' };
   },
 
   importFromJSON: (file) => {
@@ -677,6 +926,113 @@ const exportUtils = {
           } else {
             reject(new Error(error.message || 'Error al importar'));
           }
+        });
+    });
+  },
+
+  importFromCSV: (file) => {
+    return new Promise((resolve, reject) => {
+      if (!file) {
+        reject(new Error('Sin archivo'));
+        return;
+      }
+
+      const url = URL.createObjectURL(file);
+      
+      fetch(url)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Error al leer archivo');
+          }
+          return response.text();
+        })
+        .then(text => {
+          URL.revokeObjectURL(url);
+          
+          if (!text || text.trim() === '') {
+            reject(new Error('Archivo vacío'));
+            return;
+          }
+
+          const lines = text.split('\n').filter(line => line.trim());
+          
+          // Verificar encabezado
+          if (!lines[0] || !lines[0].includes('ID,Fecha,Corral')) {
+            reject(new Error('Formato CSV inválido'));
+            return;
+          }
+
+          const records = [];
+          
+          // Procesar cada línea (saltando el encabezado)
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            const values = [];
+            let current = '';
+            let inQuotes = false;
+            
+            // Parser CSV que maneja comillas
+            for (let char of line) {
+              if (char === '"') {
+                inQuotes = !inQuotes;
+              } else if (char === ',' && !inQuotes) {
+                values.push(current);
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+            values.push(current);
+
+            // Verificar que tenga suficientes columnas
+            if (values.length >= 21) {
+              try {
+                const weightsStr = values[20].replace(/"/g, '');
+                const weightsArray = weightsStr.split(';').filter(w => w.trim());
+                
+                const record = {
+                  id: parseInt(values[0]),
+                  fecha: values[1].replace(/"/g, ''),
+                  corral: values[2],
+                  edad: parseInt(values[3]),
+                  numUnidades: parseInt(values[4]),
+                  weights: weightsArray,
+                  analysis: {
+                    totalAves: parseInt(values[5]),
+                    promedio: parseFloat(values[6]),
+                    mediana: parseFloat(values[7]),
+                    uniformidad: parseFloat(values[8]),
+                    cv: parseFloat(values[9]),
+                    pesoMinimo: parseFloat(values[10]),
+                    pesoMaximo: parseFloat(values[11]),
+                    rango: parseFloat(values[12]),
+                    desviacion: parseFloat(values[13]),
+                    rango10: parseFloat(values[14]),
+                    min10: parseFloat(values[15]),
+                    max10: parseFloat(values[16]),
+                    avesDentroRango: parseInt(values[17]),
+                    avesDebajoRango: parseInt(values[18]),
+                    avesEncimaRango: parseInt(values[19])
+                  }
+                };
+                
+                records.push(record);
+              } catch (err) {
+                console.warn(`Error procesando línea ${i + 1}:`, err);
+              }
+            }
+          }
+
+          if (records.length === 0) {
+            reject(new Error('No se encontraron registros válidos'));
+            return;
+          }
+
+          resolve(records);
+        })
+        .catch(error => {
+          URL.revokeObjectURL(url);
+          reject(new Error(error.message || 'Error al importar CSV'));
         });
     });
   }
@@ -913,12 +1269,18 @@ const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformit
     onClose();
   };
 
+  const handleBackdropClick = (event) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div onClick={handleBackdropClick} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
-            <Sparkles className="w-6 h-6 inline mr-2 text-purple-600" />
+            <Sparkles className="w-6 h-6 inline mr-2 text-purple-600 dark:text-purple-400" />
             Optimizar Uniformidad
           </h2>
           <button
@@ -1134,12 +1496,21 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
     onClose();
   };
 
+  const handleBackdropClick = (event) => {
+    if (event.target === event.currentTarget) {
+      handleClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div onClick={handleBackdropClick} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Importar Pesos</h2>
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+              <Upload className="w-6 h-6 inline mr-2 text-blue-600 dark:text-blue-400" />
+              Importar Pesos
+            </h2>
             <button
               onClick={handleClose}
               className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1"
@@ -1235,9 +1606,16 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
 };
 
 // Componente: Formulario de Entrada
-const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUnidades, onNumUnidadesChange, onSave, onUpdate, onExport, canSave, isLoadedFromHistory }) => {
+const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUnidades, onNumUnidadesChange, onSave, onUpdate, onExportCSV, onExportExcel, onExportPDF, canSave, isLoadedFromHistory }) => {
   const corrales = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B', '7A', '7B', '8A', '8B', '9A', '9B'];
   const edades = [7, 14, 21, 28, 35, 42];
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef(null);
+  const buttonRef = useRef(null);
+
+  useClickOutside([menuRef, buttonRef], () => {
+    setShowMenu(false);
+  });
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
@@ -1295,15 +1673,53 @@ const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUni
         </button>
       </div>
 
-      <div className="flex items-end">
+      <div className="flex items-end relative">
         <button
-          onClick={onExport}
+          ref={buttonRef}
+          onClick={(event) => {
+            //event.stopPropagation();
+            setShowMenu(!showMenu);
+          }}
           disabled={!canSave}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
         >
-          <Download className="w-4 h-4" />
-          Exportar
+          <Download className="w-4 h-4" /> Exportar
         </button>
+        
+        {showMenu && canSave && (
+          <div ref={menuRef} className="absolute mb-2 top-full right-0 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50 min-w-[150px]">
+            <button
+              onClick={() => {
+                onExportCSV();
+                setShowMenu(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              CSV
+            </button>
+            <button
+              onClick={() => {
+                onExportExcel();
+                setShowMenu(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4 text-green-600" />
+              Excel
+            </button>
+            <button
+              onClick={() => {
+                onExportPDF();
+                setShowMenu(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4 text-red-600" />
+              PDF
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1578,10 +1994,31 @@ const StatItem = ({ label, value, valueClass = "text-gray-800 dark:text-gray-100
 );
 
 const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImportAll, onImportFromText, decimalSeparator }) => {
-  const fileInputRef = useRef(null);
+  const fileCsvInputRef = useRef(null);
+  const fileJsonInputRef = useRef(null);
   const [showTextImport, setShowTextImport] = useState(false);
   const [jsonText, setJsonText] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const menuRef = useRef(null);
+  const menuExportRef = useRef(null);
+  const buttonRef = useRef(null);
+  const buttonExportRef = useRef(null);
 
+  useClickOutside([menuRef, buttonRef], () => {
+    setShowMenu(false);
+  });
+
+  useClickOutside([menuExportRef, buttonExportRef], () => {
+    setShowExportMenu(false);
+  });
+
+  const handleBackdropClick = (event) => {
+    if (event.target === event.currentTarget) {
+      setShowTextImport(false);
+    }
+  };
+  
   const handleTextImport = () => {
     if (!jsonText.trim()) {
       return;
@@ -1591,8 +2028,12 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
     setShowTextImport(false);
   };
 
-  const handleFileSelect = () => {
-    fileInputRef.current?.click();
+  const handleFileJsonSelect = () => {
+    fileJsonInputRef.current?.click();
+  };
+
+  const handleFileCsvSelect = () => {
+    fileCsvInputRef.current?.click();
   };
 
   return (
@@ -1604,70 +2045,148 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
         </div>
         <div className="flex flex-wrap gap-2">
           <input
-            ref={fileInputRef}
+            ref={fileJsonInputRef}
             type="file"
-            accept=".json,application/json"
+            accept=".json" //,application/json
             onChange={onImportAll}
             style={{ display: 'none' }}
           />
-          <button
-            onClick={handleFileSelect}
-            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-sm font-medium"
-          >
-            <Upload className="w-4 h-4" />
-            Archivo
-          </button>
-          <button
-            onClick={() => setShowTextImport(!showTextImport)}
-            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm font-medium"
-          >
-            <FileText className="w-4 h-4" />
-            {showTextImport ? 'Cerrar' : 'Texto'}
-          </button>
-          <button
-            onClick={onExportAll}
-            className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium"
-          >
-            <Download className="w-4 h-4" />
-            Exportar
-          </button>
+          <input
+            ref={fileCsvInputRef}
+            type="file"
+            accept=".csv"
+            onChange={onImportAll}
+            style={{ display: 'none' }}
+          />
+          <div className="flex items-end relative">
+            <button
+            ref={buttonRef}
+              onClick={() => setShowMenu(!showMenu)}
+              className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm font-medium"
+            >
+              <Upload className="w-4 h-4" /> Importar
+            </button>
+            {showMenu && (
+              <div ref={menuRef} className="absolute mb-2 top-full left-0 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50 min-w-[150px]">
+                <button
+                  onClick={() => {
+                    handleFileJsonSelect();
+                    setShowMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  JSON
+                </button>
+                <button
+                  onClick={() => {
+                    handleFileCsvSelect();
+                    setShowMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4 text-green-600" />
+                  CSV
+                </button>
+                <button
+                  onClick={() => {
+                    setShowTextImport(!showTextImport)
+                    setShowMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  {/* {showTextImport ? 'Cerrar' : 'Texto'} */}
+                  Texto
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="flex items-end relative">
+            <button
+              ref={buttonExportRef}
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="flex flex-auto items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+            >
+              <Download className="w-4 h-4" />
+              Exportar
+            </button>
+            {showExportMenu && (
+              <div ref={menuExportRef} className="absolute mb-2 top-full right-0 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50 min-w-[150px]">
+                <button
+                  onClick={() => {
+                    onExportAll('J');
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  JSON
+                </button>
+                <button
+                  onClick={() => {
+                    onExportAll('C');
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4 text-green-600" />
+                  CSV
+                </button>
+              </div>
+            )}
+        </div>
         </div>
       </div>
       
       {showTextImport && (
-        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">
-            📋 Importar desde texto
-          </h3>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
-            1. Abre el archivo backup.json con un editor de texto<br/>
-            2. Copia todo el contenido (Ctrl+A, Ctrl+C)<br/>
-            3. Pega aquí abajo (Ctrl+V)<br/>
-            4. Haz clic en "Importar Datos"
-          </p>
-          <textarea
-            value={jsonText}
-            onChange={(e) => setJsonText(e.target.value)}
-            placeholder='Pega aquí el contenido del archivo JSON...'
-            className="w-full h-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 resize-none"
-          />
-          <div className="flex gap-2 mt-3">
-            <button
-              onClick={handleTextImport}
-              disabled={!jsonText.trim()}
-              className="flex-1 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium"
-            >
-              Importar Datos
-            </button>
-            <button
-              onClick={() => {
-                setJsonText('');
-                setShowTextImport(false);
-              }}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium"
-            >
-              Cancelar
-            </button>
+        <div onClick={handleBackdropClick} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                  <FileText className="w-6 h-6 inline mr-2 text-blue-600" />
+                  Importar de Texto
+                  </h2>
+                <button
+                  onClick={() => {
+                    setJsonText('');
+                    setShowTextImport(false);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                1. Abre el archivo backup.json con un editor de texto<br/>
+                2. Copia todo el contenido (Ctrl+A, Ctrl+C)<br/>
+                3. Pega aquí abajo (Ctrl+V)<br/>
+                4. Haz clic en "Importar Datos"
+              </p>
+              <textarea
+                value={jsonText}
+                onChange={(e) => setJsonText(e.target.value)}
+                placeholder='Pega aquí el contenido del archivo JSON...'
+                className="w-full h-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 resize-none"
+              />
+              <div className="flex flex-wrap gap-2 mt-3">
+                <button
+                  onClick={() => {
+                    setJsonText('');
+                    setShowTextImport(false);
+                  }}
+                  className="whitespace-nowrap flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleTextImport}
+                  disabled={!jsonText.trim()}
+                  className="whitespace-nowrap flex-1 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  Importar Datos
+                </button>
+            </div>
           </div>
         </div>
       )}
@@ -1821,9 +2340,100 @@ const PoultryWeightTracker = () => {
     }
   }, [corral, edad, analysis, weightManager, showToast]);
 
-  const handleImportFromText = useCallback((jsonText) => {
+  const handleExportExcel = useCallback(() => {
+  const result = exportUtils.exportToExcel(
+    corral,
+    edad,
+    analysis,
+    weightManager.getValidWeights()
+  );
+  if (result.success) {
+    showToast(result.message, 'success');
+  }
+}, [corral, edad, analysis, weightManager, showToast]);
+
+  const handleExportPDF = useCallback(() => {
+  const result = exportUtils.exportToPDF(
+    corral,
+    edad,
+    analysis,
+    weightManager.getValidWeights()
+  );
+  if (result.success) {
+    showToast(result.message, 'success');
+  }
+}, [corral, edad, analysis, weightManager, showToast]);
+
+  const handleImportFromText = useCallback((text) => {
     try {
-      const data = JSON.parse(jsonText);
+      // Intentar como CSV primero
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines[0] && lines[0].includes('ID,Fecha,Corral')) {
+        // Es CSV
+        const records = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          const values = [];
+          let current = '';
+          let inQuotes = false;
+          
+          for (let char of line) {
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              values.push(current);
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          values.push(current);
+
+          if (values.length >= 21) {
+            const weightsStr = values[20].replace(/"/g, '');
+            const weightsArray = weightsStr.split(';').filter(w => w.trim());
+            
+            const record = {
+              id: parseInt(values[0]),
+              fecha: values[1].replace(/"/g, ''),
+              corral: values[2],
+              edad: parseInt(values[3]),
+              numUnidades: parseInt(values[4]),
+              weights: weightsArray,
+              analysis: {
+                totalAves: parseInt(values[5]),
+                promedio: parseFloat(values[6]),
+                mediana: parseFloat(values[7]),
+                uniformidad: parseFloat(values[8]),
+                cv: parseFloat(values[9]),
+                pesoMinimo: parseFloat(values[10]),
+                pesoMaximo: parseFloat(values[11]),
+                rango: parseFloat(values[12]),
+                desviacion: parseFloat(values[13]),
+                rango10: parseFloat(values[14]),
+                min10: parseFloat(values[15]),
+                max10: parseFloat(values[16]),
+                avesDentroRango: parseInt(values[17]),
+                avesDebajoRango: parseInt(values[18]),
+                avesEncimaRango: parseInt(values[19])
+              }
+            };
+            
+            records.push(record);
+          }
+        }
+
+        if (records.length > 0) {
+          const result = recordManager.importRecords(records);
+          showToast(result.message, 'success');
+          return;
+        }
+      }
+      
+      // Si no es CSV, intentar como JSON
+      const data = JSON.parse(text);
       
       if (!data?.records?.length) {
         showToast('El texto no contiene registros válidos', 'error');
@@ -1840,12 +2450,14 @@ const PoultryWeightTracker = () => {
       const result = recordManager.importRecords(valid);
       showToast(result.message, 'success');
     } catch (error) {
-      showToast('El texto no es un JSON válido', 'error');
+      showToast('Formato de datos inválido', 'error');
     }
   }, [recordManager, showToast]);
 
-  const handleExportAll = useCallback(() => {
-    const result = exportUtils.exportAllToJSON(recordManager.registros);
+  const handleExportAll = useCallback((mimetype) => {
+    const result = mimetype === 'J'
+                  ? exportUtils.exportAllToJSON(recordManager.registros)
+                  : exportUtils.exportAllToCSVBackup(recordManager.registros);
     if (result.success) {
       showToast(result.message, 'success');
     } else {
@@ -1865,7 +2477,17 @@ const PoultryWeightTracker = () => {
     input.disabled = true;
 
     try {
-      const records = await exportUtils.importFromJSON(file);
+      let records;
+      
+      // Detectar tipo de archivo
+      if (file.name.endsWith('.csv')) {
+        records = await exportUtils.importFromCSV(file);
+      } else if (file.name.endsWith('.json')) {
+        records = await exportUtils.importFromJSON(file);
+      } else {
+        throw new Error('Formato no soportado. Use .csv o .json');
+      }
+      
       const result = recordManager.importRecords(records);
       showToast(result.message, 'success');
     } catch (error) {
@@ -1953,8 +2575,7 @@ const PoultryWeightTracker = () => {
                   }}
                   className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
                 >
-                  <History className="w-5 h-5" />
-                  Historial ({recordManager.registros.length})
+                  <History className="w-5 h-5" /> Historial ({recordManager.registros.length})
                 </button>
               </div>
             </div>
@@ -1969,7 +2590,9 @@ const PoultryWeightTracker = () => {
             onNumUnidadesChange={weightManager.updateSize}
             onSave={handleSave}
             onUpdate={handleUpdate}
-            onExport={handleExport}
+            onExportCSV={handleExport}
+            onExportExcel={handleExportExcel}
+            onExportPDF={handleExportPDF}
             canSave={!!analysis}
             isLoadedFromHistory={weightManager.isLoadedFromHistory}
           />

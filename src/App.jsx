@@ -2047,18 +2047,18 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
           <input
             ref={fileJsonInputRef}
             type="file"
-            accept=".json" //,application/json
+            accept=".json, application/json"
             onChange={onImportAll}
             style={{ display: 'none' }}
           />
           <input
             ref={fileCsvInputRef}
             type="file"
-            accept=".csv"
+            accept=".csv, text/csv"
             onChange={onImportAll}
             style={{ display: 'none' }}
           />
-          <div className="flex items-end relative">
+          <div className="flex flex-auto items-end relative">
             <button
             ref={buttonRef}
               onClick={() => setShowMenu(!showMenu)}
@@ -2102,7 +2102,7 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
               </div>
             )}
           </div>
-          <div className="flex items-end relative">
+          <div className="flex flex-auto items-end relative">
             <button
               ref={buttonExportRef}
               onClick={() => setShowExportMenu(!showExportMenu)}

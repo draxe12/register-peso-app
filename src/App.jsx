@@ -137,9 +137,9 @@ const useWeights = (initialSize = 60) => {
 
   const getValidWeights = () => {
     return weights
-      .filter(w => w !== '' && !isNaN(parseFloat(w)))
+      .filter(w => w !== '' &&  w !== ' ' && w !== '0.00' && w !== 0 && !isNaN(parseFloat(w)))
       .map(w => parseFloat(w))
-      .sort((a, b) => a - b);
+      //.sort((a, b) => a - b);
   };
 
   const importWeightsFromText = (text) => {
@@ -700,39 +700,38 @@ const exportUtils = {
       </head>
       <body>
         <table border="1">
-          <tr><td colspan="3" style="background-color: #4CAF50; color: white; font-weight: bold; font-size: 16px;">REGISTRO DE PESOS DE POLLOS</td></tr>
-          <tr><td><b>Corral:</b></td><td colspan="2">${corral}</td></tr>
-          <tr><td><b>Edad:</b></td><td colspan="2">${edad} días</td></tr>
-          <tr><td><b>Fecha:</b></td><td colspan="2">${new Date().toLocaleString('es-PE')}</td></tr>
-          <tr><td><b>Total Unidades:</b></td><td colspan="2">${analysis.totalAves}</td></tr>
-          <tr><td colspan="3"></td></tr>
+          <tr><td colspan="4" style="background-color: #4CAF50; color: white; font-weight: bold; font-size: 16px; text-align:center;">REGISTRO DE PESOS DE POLLOS</td></tr>
+          <tr><td><b>Corral</b></td><td colspan="3">${corral}</td></tr>
+          <tr><td><b>Edad</b></td><td colspan="3">${edad} días</td></tr>
+          <tr><td><b>Fecha</b></td><td colspan="3">${new Date().toLocaleString('es-PE')}</td></tr>
+          <tr><td><b>Total Unidades</b></td><td colspan="3">${analysis.totalAves}</td></tr>
           
-          <tr style="background-color: #2196F3; color: white; font-weight: bold;">
-            <td colspan="3">ANÁLISIS ESTADÍSTICO</td>
-          </tr>
-          <tr><td>Peso Mínimo (kg)</td><td>${analysis.pesoMinimo.toFixed(3)}</td><td></td></tr>
-          <tr><td>Peso Máximo (kg)</td><td>${analysis.pesoMaximo.toFixed(3)}</td><td></td></tr>
-          <tr><td>Rango (kg)</td><td>${analysis.rango.toFixed(3)}</td><td></td></tr>
-          <tr style="background-color: #E8F5E9;"><td><b>Promedio (kg)</b></td><td><b>${analysis.promedio.toFixed(3)}</b></td><td></td></tr>
-          <tr><td>Mediana (kg)</td><td>${analysis.mediana.toFixed(3)}</td><td></td></tr>
-          <tr><td>Desviación Estándar</td><td>${analysis.desviacion.toFixed(3)}</td><td></td></tr>
-          <tr><td>Coef. Variación (%)</td><td>${analysis.cv.toFixed(1)}</td><td></td></tr>
-          <tr><td colspan="3"></td></tr>
+          <tr><td colspan="4" style="background-color: #2196F3; color: white; font-weight: bold; text-align:center;">ANÁLISIS ESTADÍSTICO</td></tr>
+          <tr><td>Peso Mínimo (kg)</td><td colspan="3">${analysis.pesoMinimo.toFixed(3)}</td></tr>
+          <tr><td>Peso Máximo (kg)</td><td colspan="3">${analysis.pesoMaximo.toFixed(3)}</td></tr>
+          <tr><td>Rango (kg)</td><td colspan="3">${analysis.rango.toFixed(3)}</td></tr>
+          <tr><td style="background-color: #E8F5E9;"><b>Promedio (kg)</b></td><td colspan="3" style="background-color: #E8F5E9;"><b>${analysis.promedio.toFixed(3)}</b></td></tr>
+          <tr><td>Mediana (kg)</td><td colspan="3">${analysis.mediana.toFixed(3)}</td></tr>
+          <tr><td>Desviación Estándar (kg)</td><td colspan="3">${analysis.desviacion.toFixed(3)}</td></tr>
+          <tr><td>Coef. Variación (%)</td><td colspan="3">${analysis.cv.toFixed(1)}</td></tr>
           
-          <tr style="background-color: #FF9800; color: white; font-weight: bold;">
-            <td colspan="3">UNIFORMIDAD ±10%</td>
+          <tr><td colspan="4" style="background-color: #FF9800; color: white; font-weight: bold; text-align:center;">UNIFORMIDAD ±10%</td></tr>
+          <tr><td>Rango ±10% (kg)</td><td colspan="3">${analysis.rango10.toFixed(3)}</td></tr>
+          <tr><td>Mínimo -10% (kg)</td><td colspan="3">${analysis.min10.toFixed(3)}</td></tr>
+          <tr><td>Máximo +10% (kg)</td><td colspan="3">${analysis.max10.toFixed(3)}</td></tr>
+          <tr><td>Aves dentro del rango</td><td colspan="3">${analysis.avesDentroRango}</td></tr>
+          <tr>
+            <td style="background-color: ${analysis.uniformidad >= 75 ? '#C8E6C9' : analysis.uniformidad >= 50 ? '#FFE0B2' : '#FFCDD2'};"><b>Uniformidad (%)</b></td>
+            <td colspan="3" style="background-color: ${analysis.uniformidad >= 75 ? '#C8E6C9' : analysis.uniformidad >= 50 ? '#FFE0B2' : '#FFCDD2'};"><b>${analysis.uniformidad.toFixed(1)}</b></td>
           </tr>
-          <tr><td>Rango ±10% (kg)</td><td>${analysis.rango10.toFixed(3)}</td><td></td></tr>
-          <tr><td>Mínimo -10% (kg)</td><td>${analysis.min10.toFixed(3)}</td><td></td></tr>
-          <tr><td>Máximo +10% (kg)</td><td>${analysis.max10.toFixed(3)}</td><td></td></tr>
-          <tr><td>Aves dentro del rango</td><td>${analysis.avesDentroRango}</td><td>${((analysis.avesDentroRango/analysis.totalAves)*100).toFixed(1)}%</td></tr>
-          <tr style="background-color: ${analysis.uniformidad >= 75 ? '#C8E6C9' : analysis.uniformidad >= 50 ? '#FFE0B2' : '#FFCDD2'};">
-            <td><b>Uniformidad (%)</b></td><td><b>${analysis.uniformidad.toFixed(1)}</b></td><td></td>
-          </tr>
-          <tr><td>Aves debajo del rango</td><td>${analysis.avesDebajoRango}</td><td>${((analysis.avesDebajoRango/analysis.totalAves)*100).toFixed(1)}%</td></tr>
-          <tr><td>Aves encima del rango</td><td>${analysis.avesEncimaRango}</td><td>${((analysis.avesEncimaRango/analysis.totalAves)*100).toFixed(1)}%</td></tr>
-          <tr><td colspan="3"></td></tr>
+          <tr><td>Aves debajo del rango</td><td colspan="3">${analysis.avesDebajoRango}</td></tr>
+          <tr><td>Aves encima del rango</td><td colspan="3">${analysis.avesEncimaRango}</td></tr>
           
+          <tr style="color: white; font-weight: bold; text-align:center;">
+            <td style="background-color: #9C27B0;">N°</td><td colspan="3" style="background-color: #9C27B0;">Pesos (kg)</td>
+          </tr>`;
+    
+    /* 
           <tr style="background-color: #9C27B0; color: white; font-weight: bold;">
             <td>N°</td><td>Peso (kg)</td><td>Estado</td>
           </tr>`;
@@ -743,7 +742,34 @@ const exportUtils = {
       const color = w >= analysis.min10 && w <= analysis.max10 ? '#E8F5E9' : 
                     w < analysis.min10 ? '#FFEBEE' : '#E3F2FD';
       html += `<tr style="background-color: ${color};"><td>${i + 1}</td><td>${w.toFixed(3)}</td><td>${estado}</td></tr>`;
-    });
+    }); 
+    
+    */
+    
+    console.log(validWeights)
+
+    for (let i = 0; i < (validWeights.length / 3); i++) {
+      const w0 = validWeights[i * 3 + 0]
+      const w1 = validWeights[i * 3 + 1]
+      const w2 = validWeights[i * 3 + 2]
+
+      const color0 = w0 >= analysis.min10 && 
+              w0 <= analysis.max10 ? '#E8F5E9' : 
+              w0 < analysis.min10 ? '#FFEBEE' : '#E3F2FD';
+      const color1 = w1 >= analysis.min10 && 
+              w1 <= analysis.max10 ? '#E8F5E9' : 
+              w1 < analysis.min10 ? '#FFEBEE' : '#E3F2FD';
+      const color2 = w2 >= analysis.min10 && 
+              w2 <= analysis.max10 ? '#E8F5E9' : 
+              w2 < analysis.min10 ? '#FFEBEE' : '#E3F2FD';
+
+      html += `<tr>
+        <td style="text-align:center;">${i + 1}</td>
+        <td style="background-color: ${color0};">${w0.toFixed(2)}</td>
+        <td style="background-color: ${color1};">${w1.toFixed(2)}</td>
+        <td style="background-color: ${color2};">${w2.toFixed(2)}</td>
+      </tr>`;
+    }
     
     html += `</table></body></html>`;
 
@@ -790,6 +816,10 @@ const exportUtils = {
         
         <div class="info-box">
           <table style="border: none;">
+            <colgroup>
+              <col style="width: 50%;">
+              <col style="width: 50%;">
+            </colgroup>
             <tr style="border: none;">
               <td style="border: none;"><b>Corral:</b> ${corral}</td>
               <td style="border: none;"><b>Edad:</b> ${edad} días</td>
@@ -803,6 +833,10 @@ const exportUtils = {
 
         <div class="section-title">ANÁLISIS ESTADÍSTICO</div>
         <table>
+          <colgroup>
+            <col style="width: 50%;">
+            <col style="width: 50%;">
+          </colgroup>
           <tr><td>Peso Mínimo (kg)</td><td>${analysis.pesoMinimo.toFixed(3)}</td></tr>
           <tr><td>Peso Máximo (kg)</td><td>${analysis.pesoMaximo.toFixed(3)}</td></tr>
           <tr><td>Rango (kg)</td><td>${analysis.rango.toFixed(3)}</td></tr>
@@ -814,6 +848,10 @@ const exportUtils = {
 
         <div class="section-title">UNIFORMIDAD ±10%</div>
         <table>
+          <colgroup>
+            <col style="width: 50%;">
+            <col style="width: 50%;">
+          </colgroup>
           <tr><td>Rango ±10% (kg)</td><td>${analysis.rango10.toFixed(3)}</td></tr>
           <tr><td>Mínimo -10% (kg)</td><td>${analysis.min10.toFixed(3)}</td></tr>
           <tr><td>Máximo +10% (kg)</td><td>${analysis.max10.toFixed(3)}</td></tr>
@@ -827,17 +865,30 @@ const exportUtils = {
 
         <div class="section-title">TABLA DE PESOS REGISTRADOS</div>
         <table>
+          <colgroup>
+            <col style="width: 10%;">
+            <col style="width: 30%;">
+            <col style="width: 30%;">
+            <col style="width: 30%;">
+          </colgroup>
           <thead>
+            <tr>
+              <th style="text-align:center;">N°</th>
+              <th colspan="3" style="text-align:center;">Pesos (kg)</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+    /* 
             <tr>
               <th>N°</th><th>Peso (kg)</th><th>Estado</th>
               <th>N°</th><th>Peso (kg)</th><th>Estado</th>
               <th>N°</th><th>Peso (kg)</th><th>Estado</th>
             </tr>
-          </thead>
-          <tbody>`;
+    */
     
     // Dividir en 3 columnas
-    for (let i = 0; i < validWeights.length; i += 3) {
+    /* for (let i = 0; i < validWeights.length; i += 3) {
       html += '<tr>';
       for (let j = 0; j < 3; j++) {
         const idx = i + j;
@@ -852,6 +903,47 @@ const exportUtils = {
         }
       }
       html += '</tr>';
+    } */
+
+    const getColor = (weight) => {
+      if (weight >= analysis.min10 && weight <= analysis.max10) {
+        return '#E8F5E9';
+      }
+      if (weight < analysis.min10) {
+        return '#FFEBEE';
+      }
+      return '#E3F2FD';
+    };
+
+    for (let i = 0; i < validWeights.length; i += 3) {
+      const w0 = validWeights[i];
+      const w1 = validWeights[i + 1];
+      const w2 = validWeights[i + 2];
+
+      /* const color0 = getColor(w0, analysis);
+      const color1 = getColor(w1, analysis);
+      const color2 = getColor(w2, analysis); */
+
+      const estado0 = w0 >= analysis.min10 && 
+                      w0 <= analysis.max10 ? '✓' : 
+                      w0 < analysis.min10 ? '↓' : '↑';
+      const estado1 = w1 >= analysis.min10 && 
+                      w1 <= analysis.max10 ? '✓' : 
+                      w1 < analysis.min10 ? '↓' : '↑';
+      const estado2 = w2 >= analysis.min10 && 
+                      w2 <= analysis.max10 ? '✓' : 
+                      w2 < analysis.min10 ? '↓' : '↑';
+
+      const className0 = w0 >= analysis.min10 && w0 <= analysis.max10 ? 'green' : 'red';
+      const className1 = w1 >= analysis.min10 && w1 <= analysis.max10 ? 'green' : 'red';
+      const className2 = w2 >= analysis.min10 && w2 <= analysis.max10 ? 'green' : 'red';
+
+      html += `<tr>
+        <td style="text-align:center;">${(i / 3) + 1}</td>
+        <td style="position:relative;">${w0.toFixed(2)} <span style="position:absolute; right:20px; color:${className0}">${estado0}</span></td>
+        <td style="position:relative;">${w1.toFixed(2)} <span style="position:absolute; right:20px; color:${className1}">${estado1}</span></td>
+        <td style="position:relative;">${w2.toFixed(2)} <span style="position:absolute; right:20px; color:${className2}">${estado2}</span></td>
+      </tr>`;
     }
     
     html += `
@@ -1868,6 +1960,23 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
                     return <td key={colIdx} className="border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-900"></td>;
                   }
 
+                  const statusRange = weights[idx] === '0.00' ? '❌' :
+                                      weights[idx] >= analysis?.min10 && weights[idx] <= analysis?.max10 ? '✓' : 
+                                      weights[idx] < analysis?.min10 && weights[idx] != 0 ? '↓' : 
+                                      weights[idx] > analysis?.max10 ? '↑' : '';
+                                      
+                  const statusRangeColor = weights[idx] >= analysis?.min10 && weights[idx] <= analysis?.max10 ? 'green' : 'red';
+
+                  const classnameColor = weights[idx] === '0.00' ?
+                                        'text-red-600 dark:text-red-400' : 
+                                        weights[idx] >= analysis?.min10 && weights[idx] <= analysis?.max10 ?
+                                        'text-green-600 dark:text-green-400' : 
+                                        weights[idx] > analysis?.max10 ?
+                                        'text-blue-600 dark:text-blue-400' : 
+                                        weights[idx] < analysis?.min10 && weights[idx] != 0 ? 
+                                        'text-orange-600 dark:text-orange-400' : 
+                                        'text-gray-900 dark:text-gray-100';
+
                   return (
                     <td
                       key={colIdx}
@@ -1878,9 +1987,18 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
                         inputMode="decimal"
                         value={formatNumberForDisplay(weights[idx], decimalSeparator === 'coma' ? ',' : '.')}
                         onChange={(e) => ingresarValor(idx, e.target.value)}
-                        className="w-full px-2 py-2 pr-8 text-center border-none focus:ring-2 focus:ring-blue-400 focus:outline-none bg-transparent text-gray-900 dark:text-gray-100 text-sm sm:text-base"
+                        className={`w-full px-2 py-2 pr-8 text-center border-none focus:ring-2 focus:ring-blue-400 focus:outline-none bg-transparent ${classnameColor} text-sm sm:text-base`}
                         placeholder={`${formatNumber(0, 2, decimalSeparator)}`}
                       />
+
+                      {/* <input
+                        type="text"
+                        inputMode="decimal"
+                        value={`${formatNumberForDisplay(weights[idx], decimalSeparator === 'coma' ? ',' : '.')} ${statusRange}`}
+                        onChange={(e) => ingresarValor(idx, e.target.value.includes(' ') ? e.target.value.split(' ')[0] : e.target.value)}
+                        className={`w-full px-2 py-2 pr-8 text-center border-none focus:ring-2 focus:ring-blue-400 focus:outline-none bg-transparent ${classnameColor} text-sm sm:text-base`}
+                        placeholder={`${formatNumber(0, 2, decimalSeparator)}`}
+                      /> */}
 
                       <div className="hidden group-hover:flex flex-col absolute right-2 top-1/2 -translate-y-1/2">
                         <button

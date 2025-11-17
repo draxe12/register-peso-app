@@ -139,7 +139,7 @@ const useWeights = (initialSize = 60) => {
     return weights
       .filter(w => w !== '' &&  w !== ' ' && w !== '0.00' && w !== 0 && !isNaN(parseFloat(w)))
       .map(w => parseFloat(w))
-      .sort((a, b) => a - b);
+      //.sort((a, b) => a - b);
   };
 
   const exportWeightsToText = () => {
@@ -474,7 +474,7 @@ const useWeights = (initialSize = 60) => {
 // Hook para análisis estadístico
 const useAnalysis = (getValidWeights) => {
   const calculateAnalysis = () => {
-    const validWeights = getValidWeights();
+    const validWeights = getValidWeights().sort((a, b) => a - b);
     
     if (validWeights.length === 0) return null;
 

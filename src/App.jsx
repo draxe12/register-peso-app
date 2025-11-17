@@ -139,8 +139,35 @@ const useWeights = (initialSize = 60) => {
     return weights
       .filter(w => w !== '' &&  w !== ' ' && w !== '0.00' && w !== 0 && !isNaN(parseFloat(w)))
       .map(w => parseFloat(w))
-      //.sort((a, b) => a - b);
+      .sort((a, b) => a - b);
   };
+
+  const exportWeightsToText = () => {
+    let textoExportado = '';
+    const columnas = 3;
+
+    const newWeights = weights
+      .filter(w => w !== '' &&  w !== ' ' && w !== '0.00' && w !== 0 && !isNaN(parseFloat(w)))
+      .map(w => parseFloat(w))
+
+    if (newWeights.length === 0) {
+      return { success: false, count: 0, text: '' };
+    }
+    
+    newWeights.forEach((peso, index) => {
+      textoExportado += peso + ' ';
+
+      // Salto de línea cada 3 elementos
+      if ((index + 1) % columnas === 0) {
+          textoExportado += '\n';
+      }
+    });
+
+    // Eliminar el espacio o salto de línea final sobrante
+    const textoFinal = textoExportado.trim();
+    return { success: true, count: newWeights.length, text: textoFinal };
+  }
+
 
   const importWeightsFromText = (text) => {
     const numbers = text
@@ -434,6 +461,7 @@ const useWeights = (initialSize = 60) => {
     getValidWeights,
     setWeights,
     importWeightsFromText,
+    exportWeightsToText,
     loadWeights,
     isLoadedFromHistory,
     optimizeUniformity,
@@ -915,6 +943,8 @@ const exportUtils = {
       return '#E3F2FD';
     };
 
+    console.log(validWeights);
+
     for (let i = 0; i < validWeights.length; i += 3) {
       const w0 = validWeights[i];
       const w1 = validWeights[i + 1];
@@ -940,9 +970,9 @@ const exportUtils = {
 
       html += `<tr>
         <td style="text-align:center;">${(i / 3) + 1}</td>
-        <td style="position:relative;">${w0.toFixed(2)} <span style="position:absolute; right:20px; color:${className0}">${estado0}</span></td>
-        <td style="position:relative;">${w1.toFixed(2)} <span style="position:absolute; right:20px; color:${className1}">${estado1}</span></td>
-        <td style="position:relative;">${w2.toFixed(2)} <span style="position:absolute; right:20px; color:${className2}">${estado2}</span></td>
+        <td style="position:relative;">${w0?.toFixed(2) ?? ''} <span style="position:absolute; right:20px; color:${className0}">${w0!==undefined ? estado0 : ''}</span></td>
+        <td style="position:relative;">${w1?.toFixed(2) ?? ''} <span style="position:absolute; right:20px; color:${className1}">${w1!==undefined ? estado1 : ''}</span></td>
+        <td style="position:relative;">${w2?.toFixed(2) ?? ''} <span style="position:absolute; right:20px; color:${className2}">${w2!==undefined ? estado2 : ''}</span></td>
       </tr>`;
     }
     
@@ -1818,7 +1848,7 @@ const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUni
 });
 
 // Componente: Tabla de Pesos
-const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onOptimize, decimalSeparator, analysis, weightManager, showToast, setConfirmDialog }) => {
+const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onExportText, onOptimize, decimalSeparator, analysis, weightManager, showToast, setConfirmDialog }) => {
   const columns = 3;
   const rows = Math.ceil(numUnidades / columns);
 
@@ -1878,6 +1908,22 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
     });
   };
 
+  const handleTextExport = () => {
+    if (weights.length < 1) {
+      showToast('Por favor ingresa algunos pesos', 'warning');
+      return;
+    }
+    const result = onExportText();
+    if (result.success) {
+      navigator.clipboard.writeText(result.text)
+      result.count > 1 ? 
+        showToast(`${result.count} pesos copiados al portapapeles`, 'success') :
+        showToast(`${result.count} peso copiado al portapapeles`, 'success');
+    } else {
+      showToast('No se encontraron pesos válidos', 'error');
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 sm:p-6">
       {hasBackup && (
@@ -1928,6 +1974,13 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
           >
             <Upload className="w-4 h-4" />
             Importar
+          </button>
+          <button
+            onClick={handleTextExport}
+            className="flex flex-auto items-center justify-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Exportar
           </button>
           <button
             onClick={onClear}
@@ -2736,6 +2789,7 @@ const PoultryWeightTracker = () => {
               onWeightChange={weightManager.updateWeight}
               onClear={weightManager.clearWeights}
               onImport={() => setShowImportModal(true)}
+              onExportText={weightManager.exportWeightsToText}
               onOptimize={() => setShowOptimizeModal(true)}
               decimalSeparator={decimalSeparator}
               analysis={analysis}

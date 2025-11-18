@@ -123,7 +123,7 @@ const useSpeechRecognition = (lang = 'es-ES') => {
 
         recognitionRef.current = new SpeechRecognition();
         const recognition = recognitionRef.current;
-        recognition.continuous = true; // Mantener la escucha continua
+        recognition.continuous = false; // Mantener la escucha continua
         recognition.lang = lang;
         recognition.interimResults = true; // <--- CAMBIO CLAVE: Resultados intermedios
 
@@ -186,84 +186,6 @@ const useSpeechRecognition = (lang = 'es-ES') => {
         startListening,
         stopListening,
         setTranscript // Exportamos setTranscript para poder limpiarlo manualmente si es necesario
-    };
-};
-
-const useSpeechRecognitionWithConcatenation = (lang = 'es-ES') => {
-    const [finalTranscript, setFinalTranscript] = useState('');
-    const [isListening, setIsListening] = useState(false);
-    const [error, setError] = useState('');
-    const recognitionRef = useRef(null);
-
-    useEffect(() => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-        if (!SpeechRecognition) {
-            setError('El reconocimiento de voz no es compatible con este navegador.');
-            return;
-        }
-
-        recognitionRef.current = new SpeechRecognition();
-        const recognition = recognitionRef.current;
-        recognition.continuous = true; // Sigue escuchando
-        recognition.lang = lang;
-        recognition.interimResults = false; // Solo nos interesan los resultados finales aquí
-
-        recognition.onstart = () => {
-            setIsListening(true);
-            setError('');
-        };
-
-        recognition.onresult = (event) => {
-            let finalResult = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    finalResult += event.results[i].transcript;
-                }
-            }
-            // Cuando se completa una frase, actualizamos este estado
-            if (finalResult.trim() !== '') {
-                 setFinalTranscript(finalResult.trim());
-            }
-        };
-
-        recognition.onend = () => {
-            // No cambiamos isListening aquí si queremos que el botón lo controle manualmente
-        };
-
-        recognition.onerror = (event) => {
-            setError(`Error de reconocimiento: ${event.error}`);
-            setIsListening(false);
-        };
-
-        return () => {
-            if (recognitionRef.current) {
-                recognitionRef.current.stop();
-            }
-        };
-    }, [lang]);
-
-    const startListening = () => {
-        if (recognitionRef.current) {
-            recognitionRef.current.start();
-            setIsListening(true);
-        }
-    };
-
-    const stopListening = () => {
-        if (recognitionRef.current) {
-            recognitionRef.current.stop();
-            setIsListening(false);
-        }
-    };
-    
-    // Devolvemos la última frase finalizada
-    return {
-        lastFinalTranscript: finalTranscript,
-        isListening,
-        error,
-        startListening,
-        stopListening
     };
 };
 
@@ -1733,7 +1655,8 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
         isListening,
         error,
         startListening,
-        stopListening
+        stopListening,
+        //setTranscript    // <-- Usamos esto para limpiar la caja al añadir peso
     } = useSpeechRecognition('es-ES'); // Idioma español
 
     /* const [pesosRegistrados, setPesosRegistrados] = useState([]);
@@ -1748,17 +1671,17 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
 
     // Cuando el hook nos da una nueva frase final, la añadimos al texto existente
     /* useEffect(() => {
-      if (lastFinalTranscript) {
+      if (transcript) {
           // Añade la nueva transcripción al final del valor actual, con un espacio.
           setTextInput(prevValue => {
               // Evitamos añadir espacios extra si el campo estaba vacío
               if (prevValue.trim() === '') {
-                  return lastFinalTranscript;
+                  return transcript;
               }
-              return prevValue + ' ' + lastFinalTranscript;
+              return prevValue + ' ' + transcript;
           });
       }
-  }, [lastFinalTranscript]); */ // Se ejecuta solo cuando llega una nueva transcripción final
+  }, [transcript]); */ // Se ejecuta solo cuando llega una nueva transcripción final
 
   if (!isOpen) return null;
 

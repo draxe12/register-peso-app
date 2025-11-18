@@ -37,7 +37,7 @@ const formatNumberForDisplay = (value, separator) => {
 
 // ==================== HOOKS PERSONALIZADOS ====================
 
-const useSpeechRecognition = (lang = 'es-ES') => {
+const useSpeechRecognitionOld = (lang = 'es-ES') => {
   const [transcript, setTranscript] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState('');
@@ -100,6 +100,166 @@ const useSpeechRecognition = (lang = 'es-ES') => {
     // Devolvemos el estado y las funciones de control
     return {
         transcript,
+        isListening,
+        error,
+        startListening,
+        stopListening
+    };
+};
+
+const useSpeechRecognition = (lang = 'es-ES') => {
+    const [transcript, setTranscript] = useState('');
+    const [isListening, setIsListening] = useState(false);
+    const [error, setError] = useState('');
+    const recognitionRef = useRef(null);
+
+    useEffect(() => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            setError('El reconocimiento de voz no es compatible con este navegador.');
+            return;
+        }
+
+        recognitionRef.current = new SpeechRecognition();
+        const recognition = recognitionRef.current;
+        recognition.continuous = true; // Mantener la escucha continua
+        recognition.lang = lang;
+        recognition.interimResults = true; // <--- CAMBIO CLAVE: Resultados intermedios
+
+        recognition.onstart = () => {
+            setIsListening(true);
+            setError('');
+        };
+
+        recognition.onresult = (event) => {
+            let interimTranscript = '';
+            let finalTranscript = '';
+
+            // Iteramos sobre todos los resultados obtenidos
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+            
+            // Actualizamos el estado con la transcripción completa (final + intermedia)
+            // Esto da la sensación de escritura en tiempo real.
+            setTranscript(finalTranscript + interimTranscript);
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+        };
+
+        recognition.onerror = (event) => {
+            setError(`Error de reconocimiento: ${event.error}`);
+            setIsListening(false);
+        };
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+        };
+    }, [lang]);
+
+    const startListening = () => {
+        if (recognitionRef.current && !isListening) {
+            // No limpiamos transcript aquí para permitir adiciones continuas si es necesario
+            recognitionRef.current.start();
+        }
+    };
+
+    const stopListening = () => {
+        if (recognitionRef.current && isListening) {
+            recognitionRef.current.stop();
+        }
+    };
+
+    return {
+        transcript,
+        isListening,
+        error,
+        startListening,
+        stopListening,
+        setTranscript // Exportamos setTranscript para poder limpiarlo manualmente si es necesario
+    };
+};
+
+const useSpeechRecognitionWithConcatenation = (lang = 'es-ES') => {
+    const [finalTranscript, setFinalTranscript] = useState('');
+    const [isListening, setIsListening] = useState(false);
+    const [error, setError] = useState('');
+    const recognitionRef = useRef(null);
+
+    useEffect(() => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            setError('El reconocimiento de voz no es compatible con este navegador.');
+            return;
+        }
+
+        recognitionRef.current = new SpeechRecognition();
+        const recognition = recognitionRef.current;
+        recognition.continuous = true; // Sigue escuchando
+        recognition.lang = lang;
+        recognition.interimResults = false; // Solo nos interesan los resultados finales aquí
+
+        recognition.onstart = () => {
+            setIsListening(true);
+            setError('');
+        };
+
+        recognition.onresult = (event) => {
+            let finalResult = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalResult += event.results[i].transcript;
+                }
+            }
+            // Cuando se completa una frase, actualizamos este estado
+            if (finalResult.trim() !== '') {
+                 setFinalTranscript(finalResult.trim());
+            }
+        };
+
+        recognition.onend = () => {
+            // No cambiamos isListening aquí si queremos que el botón lo controle manualmente
+        };
+
+        recognition.onerror = (event) => {
+            setError(`Error de reconocimiento: ${event.error}`);
+            setIsListening(false);
+        };
+
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+        };
+    }, [lang]);
+
+    const startListening = () => {
+        if (recognitionRef.current) {
+            recognitionRef.current.start();
+            setIsListening(true);
+        }
+    };
+
+    const stopListening = () => {
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            setIsListening(false);
+        }
+    };
+    
+    // Devolvemos la última frase finalizada
+    return {
+        lastFinalTranscript: finalTranscript,
         isListening,
         error,
         startListening,
@@ -1569,14 +1729,15 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
 
   const {
         transcript,
+        //lastFinalTranscript, // Capturamos solo la última frase finalizada
         isListening,
         error,
         startListening,
         stopListening
     } = useSpeechRecognition('es-ES'); // Idioma español
 
-    const [pesosRegistrados, setPesosRegistrados] = useState([]);
-    const [currentPeso, setCurrentPeso] = useState('');
+    /* const [pesosRegistrados, setPesosRegistrados] = useState([]);
+    const [currentPeso, setCurrentPeso] = useState(''); */
 
     // Sincronizar el input de texto con la transcripción del hook
     useEffect(() => {
@@ -1585,18 +1746,32 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
         }
     }, [transcript]);
 
+    // Cuando el hook nos da una nueva frase final, la añadimos al texto existente
+    /* useEffect(() => {
+      if (lastFinalTranscript) {
+          // Añade la nueva transcripción al final del valor actual, con un espacio.
+          setTextInput(prevValue => {
+              // Evitamos añadir espacios extra si el campo estaba vacío
+              if (prevValue.trim() === '') {
+                  return lastFinalTranscript;
+              }
+              return prevValue + ' ' + lastFinalTranscript;
+          });
+      }
+  }, [lastFinalTranscript]); */ // Se ejecuta solo cuando llega una nueva transcripción final
+
   if (!isOpen) return null;
 
-  const handleAddPeso = () => {
+  /* const handleAddPeso = () => {
     const pesoNumerico = parseFloat(currentPeso.replace(',', '.'));
     
     if (!isNaN(pesoNumerico) && pesoNumerico > 0) {
         setPesosRegistrados([...pesosRegistrados, pesoNumerico]);
-        setCurrentPeso(''); // Limpiar el input después de añadir
+        setTextInput(''); // Limpiar el input después de añadir
     } else {
         alert('Por favor, introduce un peso numérico válido.');
     }
-  };
+  }; */
 
   const toggleListening = () => {
       if (isListening) {

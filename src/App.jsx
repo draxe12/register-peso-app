@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles } from 'lucide-react';
+import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles, Copy } from 'lucide-react';
 
 // Agregar estilos de animación
 const style = document.createElement('style');
@@ -120,7 +120,7 @@ const useWeights = (initialSize = 60) => {
       return;
     }
     
-    const finalSize = Math.min(size, 300);
+    const finalSize = Math.min(size, 120);
     setNumUnidades(finalSize);
     
     if (!isLoadedFromHistory) {
@@ -203,7 +203,7 @@ const useWeights = (initialSize = 60) => {
     setBackupNumUnidades(null);
   };
 
-  const optimizeUniformity = (targetMin = 75, targetMax = 85) => {
+  const optimizeUniformity = (targetMin, targetMax) => {
     const validIndices = [];
     const validWeights = [];
     
@@ -534,7 +534,7 @@ const useRecords = () => {
     localStorage.setItem('poultryRecords', JSON.stringify(registros));
   }, [registros]);
 
-  const saveRecord = (corral, edad, numUnidades, weights, analysis, isUpdate = false, recordId = null) => {
+  const saveRecord = (corral, sex, edad, numUnidades, weights, analysis, isUpdate = false, recordId = null) => {
     if (!analysis) {
       return { success: false, message: 'Por favor ingresa datos válidos antes de guardar' };
     }
@@ -546,6 +546,7 @@ const useRecords = () => {
               ...r,
               fecha: new Date().toLocaleString('es-PE'),
               corral,
+              sex,
               edad: parseInt(edad),
               numUnidades,
               weights: [...weights],
@@ -560,6 +561,7 @@ const useRecords = () => {
         id: Date.now(),
         fecha: new Date().toLocaleString('es-PE'),
         corral,
+        sex,
         edad: parseInt(edad),
         numUnidades,
         weights: [...weights],
@@ -598,13 +600,14 @@ const useRecords = () => {
 // ==================== UTILIDADES ====================
 
 const exportUtils = {
-  exportToCSV: (corral, edad, analysis, validWeights) => {
+  exportToCSV: (corral, sex, edad, analysis, validWeights) => {
     if (!analysis) {
       return { success: false, message: 'No hay datos para exportar' };
     }
 
     let csv = 'Registro de Pesos de Pollos\n\n';
     csv += `Corral:,${corral}\n`;
+    csv += `Sexo:,${sex}\n`;
     csv += `Edad:,${edad} días\n`;
     csv += `Fecha:,${new Date().toLocaleString('es-PE')}\n`;
     csv += `Total Unidades:,${analysis.totalAves}\n\n`;
@@ -644,10 +647,10 @@ const exportUtils = {
     }
 
     let csv = 'HISTORIAL DE REGISTROS DE PESOS\n\n';
-    csv += 'Fecha,Corral,Edad (días),Total Aves,Promedio (kg),Uniformidad (%),CV (%),Mín (kg),Máx (kg)\n';
+    csv += 'Fecha,Corral,Sexo,Edad (días),Total Aves,Promedio (kg),Uniformidad (%),CV (%),Mín (kg),Máx (kg)\n';
     
     registros.forEach(r => {
-      csv += `${r.fecha},${r.corral},${r.edad},${r.analysis.totalAves},${r.analysis.promedio.toFixed(3)},${r.analysis.uniformidad.toFixed(1)},${r.analysis.cv.toFixed(1)},${r.analysis.pesoMinimo.toFixed(3)},${r.analysis.pesoMaximo.toFixed(3)}\n`;
+      csv += `${r.fecha},${r.corral},${r.sex},${r.edad},${r.analysis.totalAves},${r.analysis.promedio.toFixed(3)},${r.analysis.uniformidad.toFixed(1)},${r.analysis.cv.toFixed(1)},${r.analysis.pesoMinimo.toFixed(3)},${r.analysis.pesoMaximo.toFixed(3)}\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -684,11 +687,11 @@ const exportUtils = {
       return { success: false, message: 'No hay registros para exportar' };
     }
 
-    let csv = 'ID,Fecha,Corral,Edad,NumUnidades,TotalAves,Promedio,Mediana,Uniformidad,CV,PesoMin,PesoMax,Rango,Desviacion,Rango10,Min10,Max10,AvesDentro,AvesDebajo,AvesEncima,Pesos\n';
+    let csv = 'ID,Fecha,Corral,Sexo,Edad,NumUnidades,TotalAves,Promedio,Mediana,Uniformidad,CV,PesoMin,PesoMax,Rango,Desviacion,Rango10,Min10,Max10,AvesDentro,AvesDebajo,AvesEncima,Pesos\n';
     
     registros.forEach(r => {
       const weights = r.weights.filter(w => w !== '').join(';');
-      csv += `${r.id},"${r.fecha}",${r.corral},${r.edad},${r.numUnidades},${r.analysis.totalAves},`;
+      csv += `${r.id},"${r.fecha}",${r.corral},${r.sex},${r.edad},${r.numUnidades},${r.analysis.totalAves},`;
       csv += `${r.analysis.promedio.toFixed(3)},${r.analysis.mediana.toFixed(3)},${r.analysis.uniformidad.toFixed(1)},`;
       csv += `${r.analysis.cv.toFixed(1)},${r.analysis.pesoMinimo.toFixed(3)},${r.analysis.pesoMaximo.toFixed(3)},`;
       csv += `${r.analysis.rango.toFixed(3)},${r.analysis.desviacion.toFixed(3)},${r.analysis.rango10.toFixed(3)},`;
@@ -705,7 +708,7 @@ const exportUtils = {
     return { success: true, message: 'Backup CSV exportado exitosamente' };
   },
 
-  exportToExcel: (corral, edad, analysis, validWeights) => {
+  exportToExcel: (corral, sex, edad, analysis, validWeights) => {
     if (!analysis) {
       return { success: false, message: 'No hay datos para exportar' };
     }
@@ -729,9 +732,10 @@ const exportUtils = {
       <body>
         <table border="1">
           <tr><td colspan="4" style="background-color: #4CAF50; color: white; font-weight: bold; font-size: 16px; text-align:center;">REGISTRO DE PESOS DE POLLOS</td></tr>
-          <tr><td><b>Corral</b></td><td colspan="3">${corral}</td></tr>
-          <tr><td><b>Edad</b></td><td colspan="3">${edad} días</td></tr>
           <tr><td><b>Fecha</b></td><td colspan="3">${new Date().toLocaleString('es-PE')}</td></tr>
+          <tr><td><b>Corral</b></td><td colspan="3">${corral}</td></tr>
+          <tr><td><b>Sexo</b></td><td colspan="3">${sex}</td></tr>
+          <tr><td><b>Edad</b></td><td colspan="3">${edad} días</td></tr>
           <tr><td><b>Total Unidades</b></td><td colspan="3">${analysis.totalAves}</td></tr>
           
           <tr><td colspan="4" style="background-color: #2196F3; color: white; font-weight: bold; text-align:center;">ANÁLISIS ESTADÍSTICO</td></tr>
@@ -810,7 +814,7 @@ const exportUtils = {
     return { success: true, message: 'Archivo Excel exportado exitosamente' };
   },
 
-  exportToPDF: (corral, edad, analysis, validWeights) => {
+  exportToPDF: (corral, sex, edad, analysis, validWeights) => {
     if (!analysis) {
       return { success: false, message: 'No hay datos para exportar' };
     }
@@ -849,12 +853,12 @@ const exportUtils = {
               <col style="width: 50%;">
             </colgroup>
             <tr style="border: none;">
-              <td style="border: none;"><b>Corral:</b> ${corral}</td>
-              <td style="border: none;"><b>Edad:</b> ${edad} días</td>
+              <td style="border: none;"><b>Fecha:</b> ${new Date().toLocaleString('es-PE')}</td>
+              <td style="border: none;"><b>Corral:</b> ${corral} - ${sex}</td>
             </tr>
             <tr style="border: none;">
-              <td style="border: none;"><b>Fecha:</b> ${new Date().toLocaleString('es-PE')}</td>
               <td style="border: none;"><b>Total Aves:</b> ${analysis.totalAves}</td>
+              <td style="border: none;"><b>Edad:</b> ${edad} días</td>
             </tr>
           </table>
         </div>
@@ -1107,34 +1111,35 @@ const exportUtils = {
             values.push(current);
 
             // Verificar que tenga suficientes columnas
-            if (values.length >= 21) {
+            if (values.length >= 22) {
               try {
-                const weightsStr = values[20].replace(/"/g, '');
+                const weightsStr = values[21].replace(/"/g, '');
                 const weightsArray = weightsStr.split(';').filter(w => w.trim());
                 
                 const record = {
                   id: parseInt(values[0]),
                   fecha: values[1].replace(/"/g, ''),
                   corral: values[2],
-                  edad: parseInt(values[3]),
-                  numUnidades: parseInt(values[4]),
+                  sex: values[3],
+                  edad: parseInt(values[4]),
+                  numUnidades: parseInt(values[5]),
                   weights: weightsArray,
                   analysis: {
-                    totalAves: parseInt(values[5]),
-                    promedio: parseFloat(values[6]),
-                    mediana: parseFloat(values[7]),
-                    uniformidad: parseFloat(values[8]),
-                    cv: parseFloat(values[9]),
-                    pesoMinimo: parseFloat(values[10]),
-                    pesoMaximo: parseFloat(values[11]),
-                    rango: parseFloat(values[12]),
-                    desviacion: parseFloat(values[13]),
-                    rango10: parseFloat(values[14]),
-                    min10: parseFloat(values[15]),
-                    max10: parseFloat(values[16]),
-                    avesDentroRango: parseInt(values[17]),
-                    avesDebajoRango: parseInt(values[18]),
-                    avesEncimaRango: parseInt(values[19])
+                    totalAves: parseInt(values[6]),
+                    promedio: parseFloat(values[7]),
+                    mediana: parseFloat(values[8]),
+                    uniformidad: parseFloat(values[9]),
+                    cv: parseFloat(values[10]),
+                    pesoMinimo: parseFloat(values[11]),
+                    pesoMaximo: parseFloat(values[12]),
+                    rango: parseFloat(values[13]),
+                    desviacion: parseFloat(values[14]),
+                    rango10: parseFloat(values[15]),
+                    min10: parseFloat(values[16]),
+                    max10: parseFloat(values[17]),
+                    avesDentroRango: parseInt(values[18]),
+                    avesDebajoRango: parseInt(values[19]),
+                    avesEncimaRango: parseInt(values[20])
                   }
                 };
                 
@@ -1372,9 +1377,9 @@ const ThemeSwitcher = React.memo(({ theme, setTheme }) => {
 });
 
 // Componente: Modal de Optimización de Uniformidad
-const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformity }) => {
-  const [targetMin, setTargetMin] = useState(75);
-  const [targetMax, setTargetMax] = useState(85);
+const OptimizeUniformityModal = ({ isOpen, onClose, targetMin, targetMax, handleTargetMin, handleTargetMax, onOptimize, currentUniformity }) => {
+/*   const [targetMin, setTargetMin] = useState(75);
+  const [targetMax, setTargetMax] = useState(85); */
 
   if (!isOpen) return null;
 
@@ -1383,8 +1388,8 @@ const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformit
       alert('El mínimo debe ser menor que el máximo');
       return;
     }
-    if (targetMin < 50 || targetMax > 95) {
-      alert('Los valores deben estar entre 50% y 95%');
+    if (targetMin < 50 || targetMax > 100) {
+      alert('Los valores deben estar entre 50% y 100%');
       return;
     }
     onOptimize(targetMin, targetMax);
@@ -1419,7 +1424,7 @@ const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformit
               <strong>Uniformidad actual:</strong> {currentUniformity?.toFixed(1)}%
             </p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-              {currentUniformity < 75 ? '📈 Se aumentará la uniformidad' : '📉 Se reducirá la uniformidad'}
+              {currentUniformity < targetMin ? '📈 Se aumentará la uniformidad' : '📉 Se reducirá la uniformidad'}
             </p>
           </div>
 
@@ -1431,9 +1436,10 @@ const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformit
               <input
                 type="number"
                 min="50"
-                max="95"
+                max="100"
                 value={targetMin}
-                onChange={(e) => setTargetMin(parseInt(e.target.value) || 75)}
+                onChange={(e) => handleTargetMin(parseInt(e.target.value))}
+                /* onChange={(e) => setTargetMin(parseInt(e.target.value) || 75)} */
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -1445,9 +1451,10 @@ const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformit
               <input
                 type="number"
                 min="50"
-                max="95"
+                max="100"
                 value={targetMax}
-                onChange={(e) => setTargetMax(parseInt(e.target.value) || 85)}
+                onChange={(e) => handleTargetMax(parseInt(e.target.value))}
+                /* onChange={(e) => setTargetMax(parseInt(e.target.value) || 85)} */
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -1455,7 +1462,7 @@ const OptimizeUniformityModal = ({ isOpen, onClose, onOptimize, currentUniformit
 
           <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
             <p className="text-xs text-gray-600 dark:text-gray-400">
-              💡 <strong>Recomendado:</strong> 75% - 85%
+              💡 <strong>Recomendado:</strong> {targetMin}% - {targetMax}%
             </p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
               ℹ️ El algoritmo ajustará los pesos manteniendo el promedio y las sumatorias por columna
@@ -1728,8 +1735,9 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
 };
 
 // Componente: Formulario de Entrada
-const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUnidades, onNumUnidadesChange, onSave, onUpdate, onExportCSV, onExportExcel, onExportPDF, canSave, isLoadedFromHistory }) => {
+const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, sex, setSex, numUnidades, onNumUnidadesChange, onSave, onUpdate, onExportCSV, onExportExcel, onExportPDF, canSave, isLoadedFromHistory }) => {
   const corrales = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B', '7A', '7B', '8A', '8B', '9A', '9B'];
+  const sexos = ['Hembra', 'Macho'];
   const edades = [7, 14, 21, 28, 35, 42];
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef(null);
@@ -1740,7 +1748,7 @@ const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUni
   });
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Corral</label>
         <select
@@ -1749,6 +1757,19 @@ const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUni
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
         >
           {corrales.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Corral</label>
+        <select
+          value={sex}
+          onChange={(e) => setSex(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
+        >
+          {sexos.map(c => (
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
@@ -1779,7 +1800,7 @@ const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUni
             }
           }}
           min="1"
-          max="300"
+          max="120"
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
         />
       </div>
@@ -1848,7 +1869,7 @@ const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, numUni
 });
 
 // Componente: Tabla de Pesos
-const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onExportText, onOptimize, decimalSeparator, analysis, weightManager, showToast, setConfirmDialog }) => {
+const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onExportText, onOptimize, decimalSeparator, targetMin, targetMax, analysis, weightManager, showToast, setConfirmDialog }) => {
   const columns = 3;
   const rows = Math.ceil(numUnidades / columns);
 
@@ -1958,14 +1979,14 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Tabla de Pesos (kg)</h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          {analysis && (analysis.uniformidad < 75 || analysis.uniformidad > 85) && (
+          {analysis && (analysis.uniformidad < targetMin || analysis.uniformidad > targetMax) && (
             <button
               onClick={onOptimize}
               className="flex flex-auto items-center justify-center px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium gap-2 shadow-md"
               title="Optimizar uniformidad"
             >
               <Sparkles className="w-4 h-4" />
-              {analysis.uniformidad < 75 ? '↑ Optimizar' : '↓ Ajustar'}
+              {analysis.uniformidad < targetMin ? '↑ Optimizar' : '↓ Ajustar'}
             </button>
           )}
           <button
@@ -1979,8 +2000,8 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
             onClick={handleTextExport}
             className="flex flex-auto items-center justify-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium gap-2"
           >
-            <Download className="w-4 h-4" />
-            Exportar
+            <Copy className="w-4 h-4" />
+            Copiar
           </button>
           <button
             onClick={onClear}
@@ -2371,6 +2392,7 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
               <tr>
                 <th className="px-4 py-2 text-left text-gray-800 dark:text-gray-100">Fecha</th>
                 <th className="px-4 py-2 text-left text-gray-800 dark:text-gray-100">Corral</th>
+                <th className="px-4 py-2 text-left text-gray-800 dark:text-gray-100">Sexo</th>
                 <th className="px-4 py-2 text-left text-gray-800 dark:text-gray-100">Edad</th>
                 <th className="px-4 py-2 text-left text-gray-800 dark:text-gray-100">Aves</th>
                 <th className="px-4 py-2 text-left text-gray-800 dark:text-gray-100">Promedio</th>
@@ -2383,6 +2405,7 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
                 <tr key={registro.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300 truncate max-w-sm">{registro.fecha}</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300 font-semibold">{registro.corral}</td>
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300 font-semibold">{registro.sex}</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{registro.edad} días</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{registro.analysis.totalAves}</td>
                   <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
@@ -2424,6 +2447,7 @@ const HistorialRegistros = ({ registros, onDelete, onLoad, onExportAll, onImport
 const PoultryWeightTracker = () => {
   const [corral, setCorral] = useState('1A');
   const [edad, setEdad] = useState('7');
+  const [sex, setSex] = useState('Hembra');
   const [showImportModal, setShowImportModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
@@ -2434,6 +2458,9 @@ const PoultryWeightTracker = () => {
   const [decimalSeparator, setDecimalSeparator] = useState(() => {
     return localStorage.getItem('decimalSeparator') || 'coma';
   });
+
+  const [targetMin, setTargetMin] = useState(75);
+  const [targetMax, setTargetMax] = useState(80);
 
   useEffect(() => {
     localStorage.setItem('decimalSeparator', decimalSeparator);
@@ -2455,6 +2482,7 @@ const PoultryWeightTracker = () => {
 
   // Memoizar setters para evitar re-renders
   const memoizedSetCorral = useCallback((value) => setCorral(value), []);
+  const memoizedSetSex = useCallback((value) => setSex(value), []);
   const memoizedSetEdad = useCallback((value) => setEdad(value), []);
   const memoizedSetDecimalSeparator = useCallback((value) => setDecimalSeparator(value), []);
   const memoizedSetTheme = useCallback((value) => setTheme(value), [setTheme]);
@@ -2462,6 +2490,7 @@ const PoultryWeightTracker = () => {
   const handleSave = useCallback(() => {
     const result = recordManager.saveRecord(
       corral,
+      sex,
       edad,
       weightManager.numUnidades,
       weightManager.weights,
@@ -2476,7 +2505,7 @@ const PoultryWeightTracker = () => {
     } else {
       showToast(result.message, 'error');
     }
-  }, [corral, edad, weightManager, analysis, recordManager, showToast]);
+  }, [corral, sex, edad, weightManager, analysis, recordManager, showToast]);
 
   const handleUpdate = useCallback(() => {
     if (!loadedRecordId) {
@@ -2485,6 +2514,7 @@ const PoultryWeightTracker = () => {
     }
     const result = recordManager.saveRecord(
       corral,
+      sex,
       edad,
       weightManager.numUnidades,
       weightManager.weights,
@@ -2497,11 +2527,12 @@ const PoultryWeightTracker = () => {
     } else {
       showToast(result.message, 'error');
     }
-  }, [corral, edad, loadedRecordId, weightManager, analysis, recordManager, showToast]);
+  }, [corral, sex, edad, loadedRecordId, weightManager, analysis, recordManager, showToast]);
 
   const handleExport = useCallback(() => {
     const result = exportUtils.exportToCSV(
       corral,
+      sex,
       edad,
       analysis,
       weightManager.getValidWeights()
@@ -2509,11 +2540,12 @@ const PoultryWeightTracker = () => {
     if (result.success) {
       showToast(result.message, 'success');
     }
-  }, [corral, edad, analysis, weightManager, showToast]);
+  }, [corral, sex, edad, analysis, weightManager, showToast]);
 
   const handleExportExcel = useCallback(() => {
   const result = exportUtils.exportToExcel(
     corral,
+    sex,
     edad,
     analysis,
     weightManager.getValidWeights()
@@ -2521,11 +2553,12 @@ const PoultryWeightTracker = () => {
   if (result.success) {
     showToast(result.message, 'success');
   }
-}, [corral, edad, analysis, weightManager, showToast]);
+}, [corral, sex, edad, analysis, weightManager, showToast]);
 
   const handleExportPDF = useCallback(() => {
   const result = exportUtils.exportToPDF(
     corral,
+    sex,
     edad,
     analysis,
     weightManager.getValidWeights()
@@ -2533,7 +2566,7 @@ const PoultryWeightTracker = () => {
   if (result.success) {
     showToast(result.message, 'success');
   }
-}, [corral, edad, analysis, weightManager, showToast]);
+}, [corral, sex, edad, analysis, weightManager, showToast]);
 
   const handleImportFromText = useCallback((text) => {
     try {
@@ -2671,6 +2704,7 @@ const PoultryWeightTracker = () => {
 
   const handleLoadRecord = useCallback((record) => {
     setCorral(record.corral);
+    setSex(record.sex);
     setEdad(record.edad.toString());
     weightManager.loadWeights(record.weights, record.numUnidades);
     setLoadedRecordId(record.id);
@@ -2757,6 +2791,8 @@ const PoultryWeightTracker = () => {
             setCorral={memoizedSetCorral}
             edad={edad}
             setEdad={memoizedSetEdad}
+            sex={sex}
+            setSex={memoizedSetSex}
             numUnidades={weightManager.numUnidades}
             onNumUnidadesChange={weightManager.updateSize}
             onSave={handleSave}
@@ -2792,6 +2828,8 @@ const PoultryWeightTracker = () => {
               onExportText={weightManager.exportWeightsToText}
               onOptimize={() => setShowOptimizeModal(true)}
               decimalSeparator={decimalSeparator}
+              targetMin={targetMin}
+              targetMax={targetMax}
               analysis={analysis}
               weightManager={weightManager}
               showToast={showToast}
@@ -2820,7 +2858,19 @@ const PoultryWeightTracker = () => {
         <OptimizeUniformityModal
           isOpen={showOptimizeModal}
           onClose={() => setShowOptimizeModal(false)}
-          onOptimize={(targetMin, targetMax) => {
+          /* onOptimize={(targetMin, targetMax) => {
+            const result = weightManager.optimizeUniformity(targetMin, targetMax);
+            if (result.success) {
+              showToast(result.message, 'success');
+            } else {
+              showToast(result.message, 'info');
+            }
+          }} */
+          targetMin={targetMin}
+          targetMax={targetMax}
+          handleTargetMin={(value) => setTargetMin(value || 75)}
+          handleTargetMax={(value) => setTargetMax(value || 80)}
+          onOptimize={() => {
             const result = weightManager.optimizeUniformity(targetMin, targetMax);
             if (result.success) {
               showToast(result.message, 'success');

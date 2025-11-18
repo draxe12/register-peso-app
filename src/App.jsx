@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles, Copy } from 'lucide-react';
+import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles, Copy, Mic, MicOff } from 'lucide-react';
 
 // Agregar estilos de animación
 const style = document.createElement('style');
@@ -36,6 +36,77 @@ const formatNumberForDisplay = (value, separator) => {
 };
 
 // ==================== HOOKS PERSONALIZADOS ====================
+
+const useSpeechRecognition = (lang = 'es-ES') => {
+  const [transcript, setTranscript] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [error, setError] = useState('');
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+          setError('El reconocimiento de voz no es compatible con este navegador.');
+          return;
+      }
+
+      recognitionRef.current = new SpeechRecognition();
+      const recognition = recognitionRef.current;
+      recognition.continuous = false;
+      recognition.lang = lang;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+          setIsListening(true);
+          setError('');
+      };
+
+      recognition.onresult = (event) => {
+          const result = event.results[0][0].transcript;
+          setTranscript(result);
+      };
+
+      recognition.onend = () => {
+          setIsListening(false);
+      };
+
+      recognition.onerror = (event) => {
+          setError(`Error de reconocimiento: ${event.error}`);
+          setIsListening(false);
+      };
+
+      // Limpieza al desmontar el componente
+      return () => {
+          if (recognitionRef.current) {
+              recognitionRef.current.stop();
+          }
+      };
+  }, [lang]);
+
+  const startListening = () => {
+        if (recognitionRef.current && !isListening) {
+            setTranscript(''); // Limpiar transcripción anterior
+            recognitionRef.current.start();
+        }
+    };
+
+    const stopListening = () => {
+        if (recognitionRef.current && isListening) {
+            recognitionRef.current.stop();
+        }
+    };
+
+    // Devolvemos el estado y las funciones de control
+    return {
+        transcript,
+        isListening,
+        error,
+        startListening,
+        stopListening
+    };
+};
+
 
 // Hook para ClickOutside
 const useClickOutside = (refs, handler) => {
@@ -1496,7 +1567,44 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
   const fileInputRef = useRef(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const {
+        transcript,
+        isListening,
+        error,
+        startListening,
+        stopListening
+    } = useSpeechRecognition('es-ES'); // Idioma español
+
+    const [pesosRegistrados, setPesosRegistrados] = useState([]);
+    const [currentPeso, setCurrentPeso] = useState('');
+
+    // Sincronizar el input de texto con la transcripción del hook
+    useEffect(() => {
+        if (transcript) {
+            setTextInput(transcript);
+        }
+    }, [transcript]);
+
   if (!isOpen) return null;
+
+  const handleAddPeso = () => {
+    const pesoNumerico = parseFloat(currentPeso.replace(',', '.'));
+    
+    if (!isNaN(pesoNumerico) && pesoNumerico > 0) {
+        setPesosRegistrados([...pesosRegistrados, pesoNumerico]);
+        setCurrentPeso(''); // Limpiar el input después de añadir
+    } else {
+        alert('Por favor, introduce un peso numérico válido.');
+    }
+  };
+
+  const toggleListening = () => {
+      if (isListening) {
+          stopListening();
+      } else {
+          startListening();
+      }
+  };
 
   const handleTextImport = () => {
     if (!textInput.trim()) {
@@ -1665,8 +1773,31 @@ const ImportModal = ({ isOpen, onClose, onImport, showToast }) => {
                 className="w-full h-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
               <button
+                onClick={toggleListening}
+                className={`
+                    flex items-center justify-center gap-2 mt-3 w-full px-4 py-2 rounded-lg text-white font-semibold shadow-md transition duration-300 
+                    ${isListening 
+                        ? 'bg-red-500 hover:bg-red-600 animate-pulse-listen' // Aplica la animación y color rojo si escucha
+                        : 'bg-blue-500 hover:bg-blue-600' // Color azul normal si no escucha
+                    }
+                `}
+                //className="mt-3 w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                {isListening ? (
+                  <>
+                    <Mic className="w-5 h-5" />
+                    Detener
+                  </>
+                ) : (
+                  <>
+                    <Mic className="w-5 h-5" />
+                    Empezar a hablar
+                  </>
+                )}
+              </button>
+              <button
                 onClick={handleTextImport}
-                className="mt-3 w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                className="mt-3 w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
               >
                 Importar desde Texto
               </button>
@@ -1763,7 +1894,7 @@ const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, sex, s
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Corral</label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sexo</label>
         <select
           value={sex}
           onChange={(e) => setSex(e.target.value)}

@@ -1614,7 +1614,7 @@ const GenerateWeightsModal = ({
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 <Calculator className="w-4 h-4 mr-2 text-green-500" />
-                Aprox. Range (kg)
+                Rango aprox. (kg)
               </label>
               <input
                 type="number"
@@ -1648,7 +1648,7 @@ const GenerateWeightsModal = ({
             onClick={handleGenerate}
             className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-all font-medium shadow-md"
           >
-            Generar Lista
+            Generar
           </button>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles, Copy, Mic, MicOff } from 'lucide-react';
+import { Calculator, Target, Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles, Copy, Mic, MicOff } from 'lucide-react';
 
 // Agregar estilos de animación
 const style = document.createElement('style');
@@ -356,7 +356,7 @@ const useWeights = (initialSize = 60) => {
     setBackupNumUnidades(null);
   };
 
-  const optimizeUniformity = (targetMin, targetMax) => {
+  const optimizeUniformityOriginal = (targetMin, targetMax) => {
     const validIndices = [];
     const validWeights = [];
     
@@ -372,8 +372,10 @@ const useWeights = (initialSize = 60) => {
     }
 
     if (!backupWeights) {
+      console.log("Creando backup de pesos originales...");
       setBackupWeights([...weights]);
       setBackupNumUnidades(numUnidades);
+      console.log("Backup creado:", [...weights]);
     }
 
     const roundToEvenDecimals = (value) => {
@@ -490,7 +492,7 @@ const useWeights = (initialSize = 60) => {
         totalAdjusted += outOfRange.length;
       });
 
-      setWeights(newWeights);
+      (newWeights);
       return { 
         success: true, 
         message: `Uniformidad mejorada. Se ajustaron ${totalAdjusted} peso(s)`,
@@ -589,6 +591,149 @@ const useWeights = (initialSize = 60) => {
     }
   };
 
+const optimizeUniformity = (targetUni) => {
+  // 1. LIMPIEZA
+  const validData = weights
+    .map((w, idx) => {
+      const cleanVal = typeof w === 'string' ? w.replace(',', '.') : w;
+      return { val: parseFloat(cleanVal), idx };
+    })
+    .filter(item => !isNaN(item.val));
+
+  if (validData.length < 3) return { success: false, message: "Datos insuficientes." };
+
+  // 2. VALIDACIÓN DE PARIDAD
+  const hasImpares = validData.some(item => Math.round(item.val * 100) % 2 !== 0);
+  if (hasImpares) return { success: false, message: "Hay pesos impares. Use múltiplos de 0.02." };
+
+  // 3. BACKUP (Corregido para asegurar persistencia)
+  if (!backupWeights || backupWeights.length === 0) {
+    console.log("Creando backup de pesos originales...");
+    setBackupWeights([...weights]);
+    setBackupNumUnidades(numUnidades);
+    console.log("Backup creado:", [...weights]);
+    // Nota: console.log(backupWeights) seguirá dando null aquí por asincronía, 
+    // pero weightsCopy tiene los datos.
+  }
+
+  let tempWeights = validData.map(d => d.val);
+  const n = tempWeights.length;
+  const sumaOriginal = tempWeights.reduce((a, b) => a + b, 0);
+  const promedio = sumaOriginal / n;
+  const rMin = promedio * 0.9;
+  const rMax = promedio * 1.1;
+
+  const initialUni = (tempWeights.filter(w => w >= rMin && w <= rMax).length / n) * 100;
+  const pollosObjetivo = Math.round((targetUni * n) / 100);
+  const roundToEven = (val) => Math.round(val * 50) / 50;
+
+  // 4. OPTIMIZACIÓN (Tomando de ambos extremos: abajo y arriba)
+  let iterations = 0;
+  let modifiedIndices = new Set();
+
+  while (iterations < 300) {
+    let indicesIn = [];
+    let indicesBajo = []; // < 10%
+    let indicesAlto = []; // > 10%
+
+    tempWeights.forEach((w, i) => {
+      if (w >= rMin && w <= rMax) indicesIn.push(i);
+      else if (w < rMin) indicesBajo.push(i);
+      else indicesAlto.push(i);
+    });
+
+    if (indicesIn.length === pollosObjetivo) break;
+
+    if (indicesIn.length < pollosObjetivo) {
+      // METER AL RANGO: Alternamos entre el más bajo y el más alto
+      let targetIdx = indicesBajo.length > 0 ? indicesBajo[0] : indicesAlto[0];
+      tempWeights[targetIdx] = roundToEven(promedio);
+      modifiedIndices.add(targetIdx);
+    } else {
+      // SACAR DEL RANGO: Empujamos hacia afuera alternando extremos
+      let targetIdx = indicesIn[0];
+      tempWeights[targetIdx] = iterations % 2 === 0 ? roundToEven(rMin - 0.04) : roundToEven(rMax + 0.04);
+      modifiedIndices.add(targetIdx);
+    }
+    iterations++;
+  }
+
+  // 5. BALANCEO DE PROMEDIO
+  let diff = sumaOriginal - tempWeights.reduce((a, b) => a + b, 0);
+  let safety = 0;
+  while (Math.abs(diff) > 0.001 && safety < 500) {
+    for (let i = 0; i < n && Math.abs(diff) > 0.001; i++) {
+      const step = diff > 0 ? 0.02 : -0.02;
+      const newVal = roundToEven(tempWeights[i] + step);
+      if ((tempWeights[i] >= rMin && tempWeights[i] <= rMax) === (newVal >= rMin && newVal <= rMax)) {
+        tempWeights[i] = newVal;
+        modifiedIndices.add(i);
+        diff = parseFloat((diff - step).toFixed(10));
+      }
+    }
+    safety++;
+  }
+
+  // 6. SHUFFLE (Algoritmo Fisher-Yates para desordenar)
+  for (let i = tempWeights.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [tempWeights[i], tempWeights[j]] = [tempWeights[j], tempWeights[i]];
+  }
+
+  // 7. MAPEO FINAL
+  const finalWeightsStrings = tempWeights.map(v => v.toFixed(2));
+  setWeights(finalWeightsStrings);
+
+  const finalUni = (tempWeights.filter(w => w >= rMin && w <= rMax).length / n) * 100;
+
+  return { 
+    success: true, 
+    message: `Uniformidad: ${initialUni.toFixed(1)}% → ${finalUni.toFixed(1)}%. Se desordenaron y ajustaron ${modifiedIndices.size} pesos.`,
+    adjustedCount: modifiedIndices.size
+  };
+};
+
+  const generateWeightsFromTarget = (avg, uni, count = 60) => {
+    // 1. Redondeo a par (múltiplo de 0.02)
+  const roundToEven = (value) => {
+    return Math.round(value * 50) / 50; 
+    // Multiplicar por 50 y redondear asegura que al dividir por 50 
+    // el resultado sea múltiplo de 0.02 (ej: 1.50, 1.52, 1.54)
+  };
+
+  // 2. Definir dispersión (sigma)
+  const cv = 0.25 - (uni / 100) * 0.2; 
+  const sigma = avg * cv;
+  let rawWeights = [];
+
+  // 3. Generación Gaussiana
+  for (let i = 0; i < count; i++) {
+    let u1 = Math.random(), u2 = Math.random();
+    let z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+    let val = z0 * sigma + avg;
+    rawWeights.push(roundToEven(val));
+  }
+
+  // 4. Ajuste final de promedio (sin romper la paridad)
+  const currentSum = rawWeights.reduce((a, b) => a + b, 0);
+  let diff = (avg * count) - currentSum;
+  
+  // Distribuimos la diferencia en pasos de 0.02 para no perder la paridad
+  const finalWeights = [...rawWeights];
+  let adjustmentStep = diff > 0 ? 0.02 : -0.02;
+  let i = 0;
+  
+  while (Math.abs(diff) >= 0.01 && i < count) {
+    finalWeights[i] = parseFloat((finalWeights[i] + adjustmentStep).toFixed(2));
+    diff -= adjustmentStep;
+    i++;
+  }
+
+  setWeights(finalWeights.map(w => w.toFixed(2)));
+
+  return { success: true, message: `${count} pesos generados con promedio ${avg} y uniformidad ${uni}%` };
+};
+
   const restoreBackup = () => {
     if (backupWeights) {
       setWeights([...backupWeights]);
@@ -618,6 +763,7 @@ const useWeights = (initialSize = 60) => {
     loadWeights,
     isLoadedFromHistory,
     optimizeUniformity,
+    generateWeightsFromTarget,
     backupWeights,
     restoreBackup,
     discardBackup
@@ -1530,22 +1676,19 @@ const ThemeSwitcher = React.memo(({ theme, setTheme }) => {
 });
 
 // Componente: Modal de Optimización de Uniformidad
-const OptimizeUniformityModal = ({ isOpen, onClose, targetMin, targetMax, handleTargetMin, handleTargetMax, onOptimize, currentUniformity }) => {
-/*   const [targetMin, setTargetMin] = useState(75);
-  const [targetMax, setTargetMax] = useState(85); */
-
+const OptimizeUniformityModal = ({ isOpen, onClose, targetUni, handleTargetUni, onOptimize, currentUniformity }) => {
   if (!isOpen) return null;
 
   const handleOptimize = () => {
-    if (targetMin >= targetMax) {
+    /* if (targetMin >= targetMax) {
       alert('El mínimo debe ser menor que el máximo');
       return;
-    }
-    if (targetMin < 50 || targetMax > 100) {
+    } */
+    if (targetUni <= 50 || targetUni > 100) {
       alert('Los valores deben estar entre 50% y 100%');
       return;
     }
-    onOptimize(targetMin, targetMax);
+    onOptimize(targetUni);
     onClose();
   };
 
@@ -1577,37 +1720,22 @@ const OptimizeUniformityModal = ({ isOpen, onClose, targetMin, targetMax, handle
               <strong>Uniformidad actual:</strong> {currentUniformity?.toFixed(1)}%
             </p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-              {currentUniformity < targetMin ? '📈 Se aumentará la uniformidad' : '📉 Se reducirá la uniformidad'}
+              {currentUniformity < targetUni ? '📈 Se aumentará la uniformidad' : '📉 Se reducirá la uniformidad'}
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Uniformidad Mínima Deseada (%)
+                Uniformidad Deseada (%)
               </label>
               <input
                 type="number"
                 min="50"
                 max="100"
-                value={targetMin}
-                onChange={(e) => handleTargetMin(parseInt(e.target.value))}
+                value={targetUni}
+                onChange={(e) => handleTargetUni(parseInt(e.target.value))}
                 /* onChange={(e) => setTargetMin(parseInt(e.target.value) || 75)} */
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Uniformidad Máxima Deseada (%)
-              </label>
-              <input
-                type="number"
-                min="50"
-                max="100"
-                value={targetMax}
-                onChange={(e) => handleTargetMax(parseInt(e.target.value))}
-                /* onChange={(e) => setTargetMax(parseInt(e.target.value) || 85)} */
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -1615,7 +1743,7 @@ const OptimizeUniformityModal = ({ isOpen, onClose, targetMin, targetMax, handle
 
           <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
             <p className="text-xs text-gray-600 dark:text-gray-400">
-              💡 <strong>Recomendado:</strong> {targetMin}% - {targetMax}%
+              💡 <strong>Recomendado:</strong> 75% - 80%
             </p>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
               ℹ️ El algoritmo ajustará los pesos manteniendo el promedio y las sumatorias por columna
@@ -1635,6 +1763,121 @@ const OptimizeUniformityModal = ({ isOpen, onClose, targetMin, targetMax, handle
             className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all font-medium"
           >
             Optimizar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const GenerateWeightsModal = ({ 
+  isOpen, 
+  onClose, 
+  targetAvg, 
+  setTargetAvg, 
+  targetUni, 
+  setTargetUni, 
+  onGenerate 
+}) => {
+
+  if (!isOpen) return null;
+
+  const handleGenerate = () => {
+    if (targetAvg <= 0) {
+      alert('El promedio debe ser mayor a 0');
+      return;
+    }
+    if (targetUni < 50 || targetUni > 100) {
+      alert('La uniformidad debe estar entre 50% y 100%');
+      return;
+    }
+    onGenerate(targetAvg, targetUni);
+    onClose();
+  };
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  return (
+    <div onClick={handleBackdropClick} className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto border border-purple-500/20">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center">
+            <Sparkles className="w-6 h-6 mr-2 text-purple-600 dark:text-purple-400" />
+            Generar Pesos
+          </h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="mb-6">
+          {/* Info Box */}
+          <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg mb-6 border border-purple-100 dark:border-purple-800/30">
+            <p className="text-sm text-purple-800 dark:text-purple-300">
+              Esta herramienta creará una lista completa de pesos que coincidan exactamente con tus metas de producción.
+            </p>
+          </div>
+
+          <div className="space-y-5">
+            {/* Input Promedio */}
+            <div>
+              <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <Target className="w-4 h-4 mr-2 text-blue-500" />
+                Promedio Objetivo (kg)
+              </label>
+              <input
+                type="number"
+                step="0.001"
+                value={targetAvg}
+                onChange={(e) => setTargetAvg(parseFloat(e.target.value))}
+                placeholder="Ej: 1.580"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+
+            {/* Input Uniformidad */}
+            <div>
+              <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <Calculator className="w-4 h-4 mr-2 text-green-500" />
+                Uniformidad Objetivo (%)
+              </label>
+              <input
+                type="number"
+                min="50"
+                max="100"
+                value={targetUni}
+                onChange={(e) => setTargetUni(parseInt(e.target.value))}
+                placeholder="Ej: 80"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+          </div>
+
+          {/* Footer Info */}
+          <div className="mt-6 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+              ℹ️ Se utilizará una <strong>Distribución Normal</strong> para simular la variabilidad natural del lote, asegurando que el promedio final sea exacto.
+            </p>
+          </div>
+        </div>
+
+        {/* Botones */}
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleGenerate}
+            className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-all font-medium shadow-md"
+          >
+            Generar Lista
           </button>
         </div>
       </div>
@@ -2098,7 +2341,7 @@ const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, sex, s
 });
 
 // Componente: Tabla de Pesos
-const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onExportText, onOptimize, decimalSeparator, targetMin, targetMax, analysis, weightManager, showToast, setConfirmDialog }) => {
+const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, onExportText, onOptimize, onFillOut, decimalSeparator, targetUniOptimize, analysis, weightManager, showToast, setConfirmDialog }) => {
   const columns = 3;
   const rows = Math.ceil(numUnidades / columns);
 
@@ -2208,14 +2451,22 @@ const TablaPesos = ({ weights, numUnidades, onWeightChange, onClear, onImport, o
           <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Tabla de Pesos (kg)</h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          {analysis && (analysis.uniformidad < targetMin || analysis.uniformidad > targetMax) && (
+          <button
+              onClick={onFillOut}
+              className="flex flex-auto items-center justify-center px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium gap-2 shadow-md"
+              title="Rellenar"
+            >
+              <Sparkles className="w-4 h-4" />
+              Rellenar
+          </button>
+          {analysis && (
             <button
               onClick={onOptimize}
               className="flex flex-auto items-center justify-center px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all text-sm font-medium gap-2 shadow-md"
               title="Optimizar uniformidad"
             >
               <Sparkles className="w-4 h-4" />
-              {analysis.uniformidad < targetMin ? '↑ Optimizar' : '↓ Ajustar'}
+              Optimizar
             </button>
           )}
           <button
@@ -2680,6 +2931,7 @@ const PoultryWeightTracker = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
+  const [showFillOutModal, setShowFillOutModal] = useState(false);
   const [loadedRecordId, setLoadedRecordId] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
@@ -2688,8 +2940,10 @@ const PoultryWeightTracker = () => {
     return localStorage.getItem('decimalSeparator') || 'coma';
   });
 
-  const [targetMin, setTargetMin] = useState(75);
-  const [targetMax, setTargetMax] = useState(80);
+  const [targetUniOptimize, setTargetUniOptimize] = useState(75);
+
+  const [targetAvg, setTargetAvg] = useState(0);
+  const [targetUni, setTargetUni] = useState(0);
 
   useEffect(() => {
     localStorage.setItem('decimalSeparator', decimalSeparator);
@@ -3056,9 +3310,9 @@ const PoultryWeightTracker = () => {
               onImport={() => setShowImportModal(true)}
               onExportText={weightManager.exportWeightsToText}
               onOptimize={() => setShowOptimizeModal(true)}
+              onFillOut={() => setShowFillOutModal(true)}
               decimalSeparator={decimalSeparator}
-              targetMin={targetMin}
-              targetMax={targetMax}
+              targetUniOptimize={targetUniOptimize}
               analysis={analysis}
               weightManager={weightManager}
               showToast={showToast}
@@ -3095,12 +3349,10 @@ const PoultryWeightTracker = () => {
               showToast(result.message, 'info');
             }
           }} */
-          targetMin={targetMin}
-          targetMax={targetMax}
-          handleTargetMin={(value) => setTargetMin(value || 75)}
-          handleTargetMax={(value) => setTargetMax(value || 80)}
+          targetUni={targetUniOptimize}
+          handleTargetUni={(value) => setTargetUniOptimize(value || 75)}
           onOptimize={() => {
-            const result = weightManager.optimizeUniformity(targetMin, targetMax);
+            const result = weightManager.optimizeUniformity(targetUniOptimize);
             if (result.success) {
               showToast(result.message, 'success');
             } else {
@@ -3108,6 +3360,23 @@ const PoultryWeightTracker = () => {
             }
           }}
           currentUniformity={analysis?.uniformidad}
+        />
+
+        <GenerateWeightsModal
+          isOpen={showFillOutModal}
+          onClose={() => setShowFillOutModal(false)}
+          targetAvg={targetAvg}
+          setTargetAvg={(value) => setTargetAvg(value || 0)}
+          targetUni={targetUni}
+          setTargetUni={(value) => setTargetUni(value || 0)}
+          onGenerate={() => {
+            const result = weightManager.generateWeightsFromTarget(targetAvg, targetUni, weightManager.numUnidades);
+            if (result.success) {
+              showToast(result.message, 'success');
+            } else {
+              showToast(result.message, 'info');
+            }
+          }}
         />
       </div>
     </div>

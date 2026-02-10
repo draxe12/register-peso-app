@@ -356,342 +356,107 @@ const useWeights = (initialSize = 60) => {
     setBackupNumUnidades(null);
   };
 
-  const optimizeUniformityOriginal = (targetMin, targetMax) => {
-    const validIndices = [];
-    const validWeights = [];
-    
-    weights.forEach((w, idx) => {
-      if (w !== '' && !isNaN(parseFloat(w))) {
-        validIndices.push(idx);
-        validWeights.push(parseFloat(w));
-      }
-    });
+  const optimizeUniformity = (targetUni) => {
+    // 1. LIMPIEZA
+    const validData = weights
+      .map((w, idx) => {
+        const cleanVal = typeof w === 'string' ? w.replace(',', '.') : w;
+        return { val: parseFloat(cleanVal), idx };
+      })
+      .filter(item => !isNaN(item.val));
 
-    if (validWeights.length < 3) {
-      return { success: false, message: 'Se necesitan al menos 3 pesos válidos para optimizar' };
-    }
+    if (validData.length < 3) return { success: false, message: "Datos insuficientes." };
 
-    if (!backupWeights) {
+    // 2. VALIDACIÓN DE PARIDAD
+    const hasImpares = validData.some(item => Math.round(item.val * 100) % 2 !== 0);
+    if (hasImpares) return { success: false, message: "Hay pesos impares. Use múltiplos de 0.02." };
+
+    // 3. BACKUP (Corregido para asegurar persistencia)
+    if (!backupWeights || backupWeights.length === 0) {
       console.log("Creando backup de pesos originales...");
       setBackupWeights([...weights]);
       setBackupNumUnidades(numUnidades);
       console.log("Backup creado:", [...weights]);
+      // Nota: console.log(backupWeights) seguirá dando null aquí por asincronía, 
+      // pero weightsCopy tiene los datos.
     }
 
-    const roundToEvenDecimals = (value) => {
-      let rounded = Math.round(value * 100) / 100;
-      let decimalPart = Math.round((rounded % 1) * 100);
-      
-      if (decimalPart % 2 !== 0) {
-        if (Math.random() < 0.5) {
-          decimalPart += 1;
-        } else {
-          decimalPart -= 1;
-        }
-        rounded = Math.floor(rounded) + (decimalPart / 100);
+    let tempWeights = validData.map(d => d.val);
+    const n = tempWeights.length;
+    const sumaOriginal = tempWeights.reduce((a, b) => a + b, 0);
+    const promedio = sumaOriginal / n;
+    const rMin = promedio * 0.9;
+    const rMax = promedio * 1.1;
+
+    const initialUni = (tempWeights.filter(w => w >= rMin && w <= rMax).length / n) * 100;
+    const pollosObjetivo = Math.round((targetUni * n) / 100);
+    const roundToEven = (val) => Math.round(val * 50) / 50;
+
+    // 4. OPTIMIZACIÓN (Tomando de ambos extremos: abajo y arriba)
+    let iterations = 0;
+    let modifiedIndices = new Set();
+
+    while (iterations < 300) {
+      let indicesIn = [];
+      let indicesBajo = []; // < 10%
+      let indicesAlto = []; // > 10%
+
+      tempWeights.forEach((w, i) => {
+        if (w >= rMin && w <= rMax) indicesIn.push(i);
+        else if (w < rMin) indicesBajo.push(i);
+        else indicesAlto.push(i);
+      });
+
+      if (indicesIn.length === pollosObjetivo) break;
+
+      if (indicesIn.length < pollosObjetivo) {
+        // METER AL RANGO: Alternamos entre el más bajo y el más alto
+        let targetIdx = indicesBajo.length > 0 ? indicesBajo[0] : indicesAlto[0];
+        tempWeights[targetIdx] = roundToEven(promedio);
+        modifiedIndices.add(targetIdx);
+      } else {
+        // SACAR DEL RANGO: Empujamos hacia afuera alternando extremos
+        let targetIdx = indicesIn[0];
+        tempWeights[targetIdx] = iterations % 2 === 0 ? roundToEven(rMin - 0.04) : roundToEven(rMax + 0.04);
+        modifiedIndices.add(targetIdx);
       }
-      
-      return parseFloat(rounded.toFixed(2));
+      iterations++;
+    }
+
+    // 5. BALANCEO DE PROMEDIO
+    let diff = sumaOriginal - tempWeights.reduce((a, b) => a + b, 0);
+    let safety = 0;
+    while (Math.abs(diff) > 0.001 && safety < 500) {
+      for (let i = 0; i < n && Math.abs(diff) > 0.001; i++) {
+        const step = diff > 0 ? 0.02 : -0.02;
+        const newVal = roundToEven(tempWeights[i] + step);
+        if ((tempWeights[i] >= rMin && tempWeights[i] <= rMax) === (newVal >= rMin && newVal <= rMax)) {
+          tempWeights[i] = newVal;
+          modifiedIndices.add(i);
+          diff = parseFloat((diff - step).toFixed(10));
+        }
+      }
+      safety++;
+    }
+
+    // 6. SHUFFLE (Algoritmo Fisher-Yates para desordenar)
+    for (let i = tempWeights.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tempWeights[i], tempWeights[j]] = [tempWeights[j], tempWeights[i]];
+    }
+
+    // 7. MAPEO FINAL
+    const finalWeightsStrings = tempWeights.map(v => v.toFixed(2));
+    setWeights(finalWeightsStrings);
+
+    const finalUni = (tempWeights.filter(w => w >= rMin && w <= rMax).length / n) * 100;
+
+    return { 
+      success: true, 
+      message: `Uniformidad: ${initialUni.toFixed(1)}% → ${finalUni.toFixed(1)}%. Se desordenaron y ajustaron ${modifiedIndices.size} pesos.`,
+      adjustedCount: modifiedIndices.size
     };
-
-    const promedio = validWeights.reduce((sum, w) => sum + w, 0) / validWeights.length;
-    const rango10 = promedio * 0.1;
-    const min10 = promedio - rango10;
-    const max10 = promedio + rango10;
-
-    const dentroRango = validWeights.filter(w => w >= min10 && w <= max10).length;
-    const uniformidadActual = (dentroRango / validWeights.length) * 100;
-
-    const needsIncrease = uniformidadActual < targetMin;
-    const needsDecrease = uniformidadActual > targetMax;
-
-    if (!needsIncrease && !needsDecrease) {
-      return { success: false, message: `La uniformidad (${uniformidadActual.toFixed(1)}%) ya está en el rango objetivo (${targetMin}%-${targetMax}%)` };
-    }
-
-    const columns = 3;
-    const columnGroups = [[], [], []];
-
-    validIndices.forEach((idx, i) => {
-      const col = idx % columns;
-      columnGroups[col].push({
-        index: idx,
-        weight: validWeights[i],
-        inRange: validWeights[i] >= min10 && validWeights[i] <= max10
-      });
-    });
-
-    const newWeights = [...weights];
-    let totalAdjusted = 0;
-
-    if (needsIncrease) {
-      columnGroups.forEach(columnWeights => {
-        if (columnWeights.length === 0) return;
-
-        const originalSum = columnWeights.reduce((sum, w) => sum + w.weight, 0);
-        const outOfRange = columnWeights.filter(w => !w.inRange);
-        const inRange = columnWeights.filter(w => w.inRange);
-
-        if (outOfRange.length === 0 || inRange.length === 0) return;
-
-        const adjustedWeights = new Map();
-
-        outOfRange.forEach(item => {
-          const currentWeight = item.weight;
-          let targetWeight;
-
-          if (currentWeight < min10) {
-            targetWeight = min10 + 0.02;
-          } else {
-            targetWeight = max10 - 0.02;
-          }
-
-          targetWeight = roundToEvenDecimals(targetWeight);
-          adjustedWeights.set(item.index, targetWeight);
-        });
-
-        let totalDiff = 0;
-        outOfRange.forEach(item => {
-          totalDiff += adjustedWeights.get(item.index) - item.weight;
-        });
-
-        const compensationPerWeight = -totalDiff / inRange.length;
-        
-        inRange.forEach(item => {
-          let compensated = item.weight + compensationPerWeight;
-          compensated = roundToEvenDecimals(compensated);
-          adjustedWeights.set(item.index, compensated);
-        });
-
-        let newSum = 0;
-        columnWeights.forEach(item => {
-          newSum += adjustedWeights.get(item.index);
-        });
-
-        const sumDiff = originalSum - newSum;
-        
-        if (Math.abs(sumDiff) > 0.001) {
-          const adjustmentStep = sumDiff > 0 ? 0.02 : -0.02;
-          let remaining = sumDiff;
-          let idx = 0;
-
-          while (Math.abs(remaining) >= 0.01 && idx < inRange.length) {
-            const item = inRange[idx];
-            const current = adjustedWeights.get(item.index);
-            const adjusted = roundToEvenDecimals(current + adjustmentStep);
-            adjustedWeights.set(item.index, adjusted);
-            remaining -= adjustmentStep;
-            idx++;
-          }
-        }
-
-        adjustedWeights.forEach((weight, index) => {
-          newWeights[index] = weight.toFixed(2);
-        });
-
-        totalAdjusted += outOfRange.length;
-      });
-
-      (newWeights);
-      return { 
-        success: true, 
-        message: `Uniformidad mejorada. Se ajustaron ${totalAdjusted} peso(s)`,
-        adjustedCount: totalAdjusted
-      };
-
-    } else {
-      columnGroups.forEach(columnWeights => {
-        if (columnWeights.length === 0) return;
-
-        const originalSum = columnWeights.reduce((sum, w) => sum + w.weight, 0);
-
-        const nearLimits = columnWeights
-          .filter(w => w.inRange)
-          .map(w => ({
-            ...w,
-            distanceToMin: Math.abs(w.weight - min10),
-            distanceToMax: Math.abs(w.weight - max10)
-          }))
-          .sort((a, b) => {
-            const minDistA = Math.min(a.distanceToMin, a.distanceToMax);
-            const minDistB = Math.min(b.distanceToMin, b.distanceToMax);
-            return minDistA - minDistB;
-          });
-
-        const targetOut = Math.ceil(columnWeights.length * 0.15);
-        const toAdjust = nearLimits.slice(0, Math.min(targetOut, nearLimits.length));
-        const remaining = columnWeights.filter(w => !toAdjust.find(t => t.index === w.index));
-
-        if (toAdjust.length === 0 || remaining.length === 0) return;
-
-        const adjustedWeights = new Map();
-
-        toAdjust.forEach(item => {
-          const currentWeight = item.weight;
-          let targetWeight;
-
-          if (item.distanceToMin < item.distanceToMax) {
-            targetWeight = min10 - 0.02;
-          } else {
-            targetWeight = max10 + 0.02;
-          }
-
-          targetWeight = roundToEvenDecimals(targetWeight);
-          adjustedWeights.set(item.index, targetWeight);
-        });
-
-        let totalDiff = 0;
-        toAdjust.forEach(item => {
-          totalDiff += adjustedWeights.get(item.index) - item.weight;
-        });
-
-        const compensationPerWeight = -totalDiff / remaining.length;
-        
-        remaining.forEach(item => {
-          let compensated = item.weight + compensationPerWeight;
-          compensated = roundToEvenDecimals(compensated);
-          adjustedWeights.set(item.index, compensated);
-        });
-
-        let newSum = 0;
-        columnWeights.forEach(item => {
-          newSum += adjustedWeights.get(item.index);
-        });
-
-        const sumDiff = originalSum - newSum;
-        
-        if (Math.abs(sumDiff) > 0.001) {
-          const adjustmentStep = sumDiff > 0 ? 0.02 : -0.02;
-          let remaining = sumDiff;
-          let idx = 0;
-
-          while (Math.abs(remaining) >= 0.01 && idx < toAdjust.length) {
-            const item = toAdjust[idx];
-            const current = adjustedWeights.get(item.index);
-            const adjusted = roundToEvenDecimals(current + adjustmentStep);
-            adjustedWeights.set(item.index, adjusted);
-            remaining -= adjustmentStep;
-            idx++;
-          }
-        }
-
-        adjustedWeights.forEach((weight, index) => {
-          newWeights[index] = weight.toFixed(2);
-        });
-
-        totalAdjusted += toAdjust.length;
-      });
-
-      setWeights(newWeights);
-      return { 
-        success: true, 
-        message: `Uniformidad ajustada a rango óptimo. Se modificaron ${totalAdjusted} peso(s)`,
-        adjustedCount: totalAdjusted
-      };
-    }
   };
-
-const optimizeUniformity = (targetUni) => {
-  // 1. LIMPIEZA
-  const validData = weights
-    .map((w, idx) => {
-      const cleanVal = typeof w === 'string' ? w.replace(',', '.') : w;
-      return { val: parseFloat(cleanVal), idx };
-    })
-    .filter(item => !isNaN(item.val));
-
-  if (validData.length < 3) return { success: false, message: "Datos insuficientes." };
-
-  // 2. VALIDACIÓN DE PARIDAD
-  const hasImpares = validData.some(item => Math.round(item.val * 100) % 2 !== 0);
-  if (hasImpares) return { success: false, message: "Hay pesos impares. Use múltiplos de 0.02." };
-
-  // 3. BACKUP (Corregido para asegurar persistencia)
-  if (!backupWeights || backupWeights.length === 0) {
-    console.log("Creando backup de pesos originales...");
-    setBackupWeights([...weights]);
-    setBackupNumUnidades(numUnidades);
-    console.log("Backup creado:", [...weights]);
-    // Nota: console.log(backupWeights) seguirá dando null aquí por asincronía, 
-    // pero weightsCopy tiene los datos.
-  }
-
-  let tempWeights = validData.map(d => d.val);
-  const n = tempWeights.length;
-  const sumaOriginal = tempWeights.reduce((a, b) => a + b, 0);
-  const promedio = sumaOriginal / n;
-  const rMin = promedio * 0.9;
-  const rMax = promedio * 1.1;
-
-  const initialUni = (tempWeights.filter(w => w >= rMin && w <= rMax).length / n) * 100;
-  const pollosObjetivo = Math.round((targetUni * n) / 100);
-  const roundToEven = (val) => Math.round(val * 50) / 50;
-
-  // 4. OPTIMIZACIÓN (Tomando de ambos extremos: abajo y arriba)
-  let iterations = 0;
-  let modifiedIndices = new Set();
-
-  while (iterations < 300) {
-    let indicesIn = [];
-    let indicesBajo = []; // < 10%
-    let indicesAlto = []; // > 10%
-
-    tempWeights.forEach((w, i) => {
-      if (w >= rMin && w <= rMax) indicesIn.push(i);
-      else if (w < rMin) indicesBajo.push(i);
-      else indicesAlto.push(i);
-    });
-
-    if (indicesIn.length === pollosObjetivo) break;
-
-    if (indicesIn.length < pollosObjetivo) {
-      // METER AL RANGO: Alternamos entre el más bajo y el más alto
-      let targetIdx = indicesBajo.length > 0 ? indicesBajo[0] : indicesAlto[0];
-      tempWeights[targetIdx] = roundToEven(promedio);
-      modifiedIndices.add(targetIdx);
-    } else {
-      // SACAR DEL RANGO: Empujamos hacia afuera alternando extremos
-      let targetIdx = indicesIn[0];
-      tempWeights[targetIdx] = iterations % 2 === 0 ? roundToEven(rMin - 0.04) : roundToEven(rMax + 0.04);
-      modifiedIndices.add(targetIdx);
-    }
-    iterations++;
-  }
-
-  // 5. BALANCEO DE PROMEDIO
-  let diff = sumaOriginal - tempWeights.reduce((a, b) => a + b, 0);
-  let safety = 0;
-  while (Math.abs(diff) > 0.001 && safety < 500) {
-    for (let i = 0; i < n && Math.abs(diff) > 0.001; i++) {
-      const step = diff > 0 ? 0.02 : -0.02;
-      const newVal = roundToEven(tempWeights[i] + step);
-      if ((tempWeights[i] >= rMin && tempWeights[i] <= rMax) === (newVal >= rMin && newVal <= rMax)) {
-        tempWeights[i] = newVal;
-        modifiedIndices.add(i);
-        diff = parseFloat((diff - step).toFixed(10));
-      }
-    }
-    safety++;
-  }
-
-  // 6. SHUFFLE (Algoritmo Fisher-Yates para desordenar)
-  for (let i = tempWeights.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [tempWeights[i], tempWeights[j]] = [tempWeights[j], tempWeights[i]];
-  }
-
-  // 7. MAPEO FINAL
-  const finalWeightsStrings = tempWeights.map(v => v.toFixed(2));
-  setWeights(finalWeightsStrings);
-
-  const finalUni = (tempWeights.filter(w => w >= rMin && w <= rMax).length / n) * 100;
-
-  return { 
-    success: true, 
-    message: `Uniformidad: ${initialUni.toFixed(1)}% → ${finalUni.toFixed(1)}%. Se desordenaron y ajustaron ${modifiedIndices.size} pesos.`,
-    adjustedCount: modifiedIndices.size
-  };
-};
 
   const generateWeightsFromTarget = (avg, uni, count = 60) => {
     // 1. Redondeo a par (múltiplo de 0.02)

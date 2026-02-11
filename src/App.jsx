@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Calculator, Target, Scale, Upload, FileText, Camera, X, Save, Download, History, Trash2, BarChart3, Moon, Sun, Monitor, Edit, Menu, Sparkles, Copy, Mic, MicOff } from 'lucide-react';
+import InputNumber from './components/InputNumber';
+import { formatNumber, formatNumberForDisplay } from './utils/format';
+import { ChevronDownIcon, ChevronUpIcon, CommaIcon, DotIcon } from './components/icons';
 
 // Agregar estilos de animación
 const style = document.createElement('style');
@@ -19,21 +22,6 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
-
-// ==================== UTILIDADES DE FORMATO ====================
-const formatNumber = (value, decimals, separator) => {
-    if (value === null || value === undefined || isNaN(value)) return '0';
-    const factor = Math.pow(10, decimals);
-    const rounded = Math.round((value + Number.EPSILON) * factor) / factor;
-    const fixed = rounded.toFixed(decimals);
-    return separator === 'coma' ? fixed.replace('.', ',') : fixed;
-};
-
-const formatNumberForDisplay = (value, separator) => {
-  if (!value || value === '') return '';
-  const strValue = String(value);
-  return separator === ',' ? strValue.replace('.', ',') : strValue.replace(',', '.');
-};
 
 // ==================== HOOKS PERSONALIZADOS ====================
 
@@ -273,7 +261,7 @@ const useWeights = (initialSize = 60) => {
       return;
     }
     
-    const finalSize = Math.min(size, 120);
+    const finalSize = Math.min(size, 200);
     setNumUnidades(finalSize);
     
     if (!isLoadedFromHistory) {
@@ -465,7 +453,8 @@ const handleFillWeights = (targetAvg, range, totalPollos) => {
   const roundToEven = (val) => Math.round(val * 50) / 50;
 
   // Definimos el rango de 400g - 500g
-  const spread = range + (Math.random() * 0.10);
+  const cleanRange = parseFloat(range.toString().replace(',', '.'));
+  const spread = cleanRange + (Math.random() * 0.10);
   const minAbs = roundToEven(cleanAvg - (spread / 2));
   const maxAbs = roundToEven(minAbs + spread);
 
@@ -1371,31 +1360,6 @@ const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message }) => {
   );
 };
 
-// Iconos SVG personalizados
-const CommaIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M10 7A3 3 0 0 1 13 10V13A3 3 0 0 1 7 13V10A3 3 0 0 1 10 7M10 9A1 1 0 0 0 9 10V13A1 1 0 0 0 11 13V10A1 1 0 0 0 10 9M17 7A3 3 0 0 1 20 10V13A3 3 0 0 1 14 13V10A3 3 0 0 1 17 7M17 9A1 1 0 0 0 16 10V13A1 1 0 0 0 18 13V10A1 1 0 0 0 17 9M5 14A1 1 0 0 0 4 15L5 18H6V15A1 1 0 0 0 5 14Z" />
-  </svg>
-);
-
-const DotIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M10 7A3 3 0 0 0 7 10V13A3 3 0 0 0 13 13V10A3 3 0 0 0 10 7M11 13A1 1 0 0 1 9 13V10A1 1 0 0 1 11 10M17 7A3 3 0 0 0 14 10V13A3 3 0 0 0 20 13V10A3 3 0 0 0 17 7M18 13A1 1 0 0 1 16 13V10A1 1 0 0 1 18 10M6 15A1 1 0 1 1 5 14A1 1 0 0 1 6 15Z" />
-  </svg>
-);
-
-const ChevronUpIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="18 15 12 9 6 15" />
-  </svg>
-);
-
-const ChevronDownIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="6 9 12 15 18 9" />
-  </svg>
-);
-
 // Componente: Decimal Separator Switcher
 const DecimalSeparatorSwitcher = React.memo(({ decimalSeparator, setDecimalSeparator }) => (
   <div className="flex gap-2 justify-center bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
@@ -1499,13 +1463,16 @@ const OptimizeUniformityModal = ({ isOpen, onClose, targetUni, setTargetUni, onO
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Uniformidad Deseada (%)
               </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={targetUni}
-                onChange={(e) => setTargetUni(parseInt(e.target.value))}
-                /* onChange={(e) => setTargetMin(parseInt(e.target.value) || 75)} */
+              
+              <InputNumber 
+                value = {targetUni}
+                onChange = {(value) => setTargetUni(value)}
+                min={0}
+                max={100}
+                step={1}
+                placeholder={0}
+                //decimalSeparator={decimalSeparator}
+                decimalToFixed={0}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -1547,7 +1514,8 @@ const GenerateWeightsModal = ({
   setTargetAvg, 
   targetRange, 
   setTargetRange, 
-  onGenerate 
+  onGenerate,
+  decimalSeparator
 }) => {
 
   if (!isOpen) return null;
@@ -1567,6 +1535,12 @@ const GenerateWeightsModal = ({
 
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) onClose();
+  };
+
+  const ingresarValorAvg = (value) => {
+    let valueToProcess = String(value);
+    valueToProcess = valueToProcess.replace(',', '.');
+    setTargetAvg(valueToProcess);
   };
 
   return (
@@ -1599,13 +1573,15 @@ const GenerateWeightsModal = ({
                 <Target className="w-4 h-4 mr-2 text-blue-500" />
                 Promedio Objetivo (kg)
               </label>
-              <input
-                type="number"
-                min="0"
-                step="0.001"
-                value={targetAvg}
-                onChange={(e) => setTargetAvg(parseFloat(e.target.value))}
-                placeholder="Ej: 1.580"
+              
+              <InputNumber 
+                value = {targetAvg}
+                onChange = {(value) => setTargetAvg(value)}
+                min={0}
+                step={0.001}
+                placeholder={0.000}
+                decimalSeparator={decimalSeparator}
+                decimalToFixed={3}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -1614,15 +1590,16 @@ const GenerateWeightsModal = ({
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 <Calculator className="w-4 h-4 mr-2 text-green-500" />
-                Rango aprox. (kg)
+                Rango aproximado (kg)
               </label>
-              <input
-                type="number"
-                min="0"
-                step="0.001"
-                value={targetRange}
-                onChange={(e) => setTargetRange(parseFloat(e.target.value))}
-                placeholder="Ej: 0.300"
+              <InputNumber 
+                value = {targetRange}
+                onChange = {(value) => setTargetRange(value)}
+                min={0}
+                step={0.1}
+                placeholder={0.000}
+                decimalSeparator={decimalSeparator}
+                decimalToFixed={3}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -2033,17 +2010,16 @@ const FormularioEntrada = React.memo(({ corral, setCorral, edad, setEdad, sex, s
 
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">N° Unidades</label>
-        <input
-          type="number"
-          value={numUnidades}
-          onChange={(e) => onNumUnidadesChange(e.target.value)}
-          onBlur={(e) => {
-            if (e.target.value === '' || e.target.value === '0') {
-              onNumUnidadesChange('60');
-            }
-          }}
-          min="1"
-          max="120"
+    
+        <InputNumber 
+          value = {numUnidades}
+          onChange = {(value) => onNumUnidadesChange(value)}
+          min={1}
+          //max={100}
+          step={1}
+          placeholder={0}
+          //decimalSeparator={decimalSeparator}
+          decimalToFixed={0}
           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-medium"
         />
       </div>
@@ -3147,6 +3123,7 @@ const PoultryWeightTracker = () => {
               showToast(result.message, 'info');
             }
           }}
+          decimalSeparator={decimalSeparator}
         />
       </div>
     </div>
